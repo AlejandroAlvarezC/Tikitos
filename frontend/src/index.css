@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@media print {
+  /* La magia de las hojas y la cuadrícula */
+  .print-page {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr); /* 4 columnas */
+    gap: 8px;
+    align-content: start;
+    page-break-after: always; /* Salto de página después de 24 etiquetas */
+    break-after: page;
+  }
+  
+  /* Evita una hoja extra en blanco al final */
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  /* Diseño de cada etiqueta al imprimir */
+  .print-label {
+    border: 1px dashed #999 !important; 
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    padding: 10px !important;
+    margin: 0;
+    width: 100% !important;
+  }
+
+  @page {
+    margin: 10mm;
+  }
+}
