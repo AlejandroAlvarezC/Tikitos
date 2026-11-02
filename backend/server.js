@@ -20,8 +20,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
-
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Conectar a la base de datos
 connectDB();
@@ -29,10 +29,6 @@ connectDB();
 // Rutas
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/qr-templates', qrRoutes);
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, '0.0.0.0', () => {
