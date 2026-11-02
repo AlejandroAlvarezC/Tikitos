@@ -38,14 +38,16 @@ export default function AddProduct({ onProductAdded, codigoEscaneado }) {
 
       const esMedia = codigoLimpio.toUpperCase().includes('MEDIA');
 
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         id: codigoLimpio,
-        marca: datosParsed.marca ? String(datosParsed.marca).trim() : (esMedia ? "Bebeto" : ""),
-        estilo: datosParsed.estilo ? String(datosParsed.estilo) : (esMedia ? "07" : ""),
-        color: datosParsed.color ? String(datosParsed.color).trim() : "",
-        pares: datosParsed.pares ? Number(datosParsed.pares) : (esMedia ? 6 : ""),
-        imagen: datosParsed.imagen ? String(datosParsed.imagen) : ""
-      });
+        marca: datosParsed.marca ? String(datosParsed.marca).trim() : (esMedia ? "Bebeto" : prev.marca),
+        estilo: datosParsed.estilo ? String(datosParsed.estilo) : (esMedia ? "07" : prev.estilo),
+        color: datosParsed.color ? String(datosParsed.color).trim() : prev.color,
+        pares: datosParsed.pares ? Number(datosParsed.pares) : (esMedia ? 6 : prev.pares),
+        // Si el QR ya trae una imagen guardada (Base64 o URL), la respeta; si no, mantiene la actual
+        imagen: datosParsed.imagen ? String(datosParsed.imagen) : prev.imagen
+      }));
 
       verificarProducto(codigoLimpio);
     }
@@ -87,6 +89,18 @@ export default function AddProduct({ onProductAdded, codigoEscaneado }) {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Manejador para convertir la imagen local a Base64 con FileReader
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, imagen: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -117,7 +131,6 @@ export default function AddProduct({ onProductAdded, codigoEscaneado }) {
   };
 
   const handleEliminarSalida = async () => {
-    // Priorizamos estrictamente el _id real de MongoDB del producto encontrado
     const codigoAEnviar = productExistente?._id || productExistente?.qrCode || productExistente?.id || formData.id;
 
     if (!codigoAEnviar) {
@@ -231,16 +244,23 @@ export default function AddProduct({ onProductAdded, codigoEscaneado }) {
           </div>
         </div>
 
+        {/* Sección de Imagen con Selector de Archivos y Vista Previa */}
         <div>
-          <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Imagen (URL)</label>
-          <input
-            type="text"
-            name="imagen"
-            value={formData.imagen}
-            onChange={handleChange}
-            placeholder="https://..."
-            className="w-full p-2.5 text-sm border border-gray-300 rounded-lg"
-          />
+          <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Fotografía del Producto</label>
+          <div className="flex items-center gap-4">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-gray-300 rounded-lg"
+            />
+            {formData.imagen && (
+              <div className="w-12 h-12 flex-shrink-0 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
+                <img src={formData.imagen} alt="Vista previa" className="w-full h-full object-cover" />
+              </div>
+            )}
+          </div>
+          <span className="text-[10px] text-gray-400 mt-1 block">La imagen se guardará optimizada directamente en la base de datos.</span>
         </div>
 
         {/* Botones de acción */}
