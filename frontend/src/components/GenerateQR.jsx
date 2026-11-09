@@ -17,9 +17,9 @@ export default function GenerateQR() {
   const [hojasMedia, setHojasMedia] = useState(1);
   const [modelosMediaGuardados, setModelosMediaGuardados] = useState([]);
 
-  // 🌟 Estados para el Modal de Impresión de Media Docena
+  // 🌟 Estados para el Modal de Impresión de Media Docena (Almacena { [id]: cantidad })
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [selectedMediaForPrint, setSelectedMediaForPrint] = useState({}); // { [id]: boolean }
+  const [selectedMediaForPrint, setSelectedMediaForPrint] = useState({}); 
 
   // 🌟 Cargar plantillas desde el Backend
   const fetchTemplates = useCallback(async () => {
@@ -34,12 +34,8 @@ export default function GenerateQR() {
       setModelosGuardados(individualList);
       setModelosMediaGuardados(mediaList);
 
-      const initialMediaSelection = {};
-      mediaList.forEach(m => {
-        const id = m._id || m.id;
-        initialMediaSelection[id] = false;
-      });
-      setSelectedMediaForPrint(initialMediaSelection);
+      // Limpiamos selección al recargar plantillas
+      setSelectedMediaForPrint({});
 
     } catch (err) {
       console.error("Error al obtener plantillas:", err);
@@ -192,33 +188,47 @@ export default function GenerateQR() {
     </div>
   );
 
-  // Etiqueta al doble de tamaño para impresión individualizada
+  // 🌟 Etiqueta compacta optimizada para 5 columnas (5x5 por hoja = 25 unidades)
   const EtiquetaMediaModalItem = ({ m }) => (
-    <div className="media-large-card bg-white p-5 border-2 border-purple-300 rounded-2xl text-center flex flex-col items-center justify-center relative">
-      <span className="absolute top-3 right-3 bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-1 rounded-md">
-        6 Pares
+    <div className="media-large-card bg-white p-1.5 border border-purple-300 rounded-lg text-center flex flex-col items-center justify-center relative page-break-inside-avoid shadow-sm">
+      <span className="absolute top-1 right-1 bg-purple-100 text-purple-800 text-[7px] font-bold px-1 py-0.2 rounded">
+        6P
       </span>
-      <h3 className="font-black text-xl text-gray-900 uppercase tracking-wider m-0">
+      <h3 className="font-bold text-[11px] text-gray-900 uppercase tracking-wide m-0 truncate w-full">
         {m.marca || "MARCA"}
       </h3>
-      <div className="my-3 p-2 bg-white rounded-xl border border-gray-200">
-        <QRCodeSVG value={m.qrCode ? getMediaQrDataJSON(m) : "vacio"} size={170} level="M" />
+      <div className="my-0.5 p-0.5 bg-white rounded border border-gray-200">
+        <QRCodeSVG value={m.qrCode ? getMediaQrDataJSON(m) : "vacio"} size={80} level="M" />
       </div>
-      <div className="text-sm text-gray-800 space-y-1 font-semibold leading-tight w-full">
-        <p><span className="font-bold text-gray-500">Est:</span> {m.estilo || "—"} | <span className="font-bold text-gray-500">Col:</span> {m.color || "—"}</p>
+      <div className="text-[8px] text-gray-800 space-y-0.5 font-medium leading-tight w-full">
+        <p className="truncate"><span className="font-bold text-gray-500">Est:</span> {m.estilo || "—"} | <span className="font-bold text-gray-500">Col:</span> {m.color || "—"}</p>
         
-        <div className="flex justify-center gap-3 bg-purple-50 text-purple-900 px-3 py-1.5 rounded-lg my-1 text-xs font-extrabold border border-purple-100">
-          <span>T10: {m.tallas?.["10"] || 0}</span>
-          <span>T11: {m.tallas?.["11"] || 0}</span>
-          <span>T12: {m.tallas?.["12"] || 0}</span>
+        <div className="flex justify-center gap-1 bg-purple-50 text-purple-900 px-1 py-0.2 rounded my-0.2 text-[7px] font-bold border border-purple-100">
+          <span>10:{m.tallas?.["10"] || 0}</span>
+          <span>11:{m.tallas?.["11"] || 0}</span>
+          <span>12:{m.tallas?.["12"] || 0}</span>
         </div>
 
-        <p className="font-mono text-[11px] text-gray-400 truncate">{m.qrCode || "—"}</p>
+        <p className="font-mono text-[6px] text-gray-400 truncate">{m.qrCode || "—"}</p>
       </div>
     </div>
   );
 
-  const seleccionadosMedia = modelosMediaGuardados.filter(m => selectedMediaForPrint[m._id || m.id]);
+  // Generamos una lista plana duplicando cada plantilla según la cantidad elegida
+  const seleccionadosMedia = modelosMediaGuardados.flatMap(m => {
+    const id = m._id || m.id;
+    const cantidad = selectedMediaForPrint[id];
+    if (!cantidad || cantidad <= 0) return [];
+    return Array.from({ length: cantidad }, () => m);
+  });
+
+  // Agrupamos en bloques exactos de 25 para que cada hoja impresa contenga una cuadrícula completa de 5x5
+  const paginasMedia = [];
+  for (let i = 0; i < seleccionadosMedia.length; i += 25) {
+    paginasMedia.push(seleccionadosMedia.slice(i, i + 25));
+  }
+
+  const totalEtiquetasSeleccionadas = Object.values(selectedMediaForPrint).reduce((a, b) => a + (b || 0), 0);
 
   return (
     <div className="bg-white rounded-xl shadow p-6 mb-6 print:p-0 print:shadow-none print:m-0 print:bg-transparent">
@@ -532,14 +542,14 @@ export default function GenerateQR() {
 
       </div>
 
-      {/* 🌟 VENTANA EMERGENTE (MODAL) SIN CAMPO DE HOJAS */}
+      {/* 🌟 VENTANA EMERGENTE (MODAL) CON OPCIÓN DE 20, 25 Y 50 UNIDADES */}
       {isPrintModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="p-4 bg-purple-900 text-white flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-lg">🖨️ Seleccionar Plantillas (Media Docena)</h3>
-                <p className="text-xs text-purple-200">Se imprimirá 1 sola unidad al doble de tamaño por cada plantilla seleccionada.</p>
+                <p className="text-xs text-purple-200">Elige cuántas etiquetas de cada plantilla deseas imprimir.</p>
               </div>
               <button 
                 onClick={() => setIsPrintModalOpen(false)}
@@ -555,12 +565,13 @@ export default function GenerateQR() {
               ) : (
                 modelosMediaGuardados.map((m) => {
                   const id = m._id || m.id;
-                  const isChecked = Boolean(selectedMediaForPrint[id]);
+                  const cantidadActual = selectedMediaForPrint[id];
+                  const isChecked = cantidadActual !== undefined && cantidadActual > 0;
 
                   return (
-                    <label 
+                    <div 
                       key={id} 
-                      className={`flex items-center justify-between p-3 border rounded-xl transition cursor-pointer ${
+                      className={`flex items-center justify-between p-3 border rounded-xl transition ${
                         isChecked ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:bg-gray-50"
                       }`}
                     >
@@ -569,10 +580,15 @@ export default function GenerateQR() {
                           type="checkbox"
                           checked={isChecked}
                           onChange={(e) => {
-                            setSelectedMediaForPrint(prev => ({
-                              ...prev,
-                              [id]: e.target.checked
-                            }));
+                            setSelectedMediaForPrint(prev => {
+                              const copia = { ...prev };
+                              if (e.target.checked) {
+                                copia[id] = 1; // Por defecto arranca en 1 unidad
+                              } else {
+                                delete copia[id];
+                              }
+                              return copia;
+                            });
                           }}
                           className="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer"
                         />
@@ -583,16 +599,39 @@ export default function GenerateQR() {
                         </div>
                       </div>
 
-                      <span className="text-xs font-bold px-2 py-1 bg-white border border-gray-200 rounded text-gray-600">
-                        1 Unidad
-                      </span>
-                    </label>
+                      {/* Selector con opción de 20, 25 y 50 */}
+                      <div>
+                        {isChecked ? (
+                          <select
+                            value={cantidadActual}
+                            onChange={(e) => {
+                              const nuevaCantidad = parseInt(e.target.value) || 1;
+                              setSelectedMediaForPrint(prev => ({
+                                ...prev,
+                                [id]: nuevaCantidad
+                              }));
+                            }}
+                            className="text-xs font-semibold text-purple-700 bg-white border border-purple-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm cursor-pointer"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 10, 12, 18, 20, 24, 25, 50].map((num) => (
+                              <option key={num} value={num}>
+                                {num} {num === 1 ? 'Unidad' : 'Unidades'} {num === 25 ? '⭐ (1 Hoja)' : num === 50 ? '⭐ (2 Hojas)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg">
+                            1 Unidad
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   );
                 })
               )}
             </div>
 
-            <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+            <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
               <button
                 onClick={() => setIsPrintModalOpen(false)}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl text-sm transition cursor-pointer"
@@ -600,25 +639,25 @@ export default function GenerateQR() {
                 Cancelar
               </button>
               <button
-                disabled={seleccionadosMedia.length === 0}
+                disabled={totalEtiquetasSeleccionadas === 0}
                 onClick={() => {
                   setIsPrintModalOpen(false);
                   setTimeout(() => window.print(), 200);
                 }}
                 className={`px-6 py-2 font-bold rounded-xl text-sm transition shadow-sm cursor-pointer flex items-center gap-2 ${
-                  seleccionadosMedia.length > 0 
+                  totalEtiquetasSeleccionadas > 0 
                     ? "bg-purple-600 hover:bg-purple-700 text-white" 
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
-                🖨️ Imprimir {seleccionadosMedia.length} Etiqueta{seleccionadosMedia.length !== 1 ? "s" : ""}
+                🖨️ Imprimir {totalEtiquetasSeleccionadas} Etiqueta{totalEtiquetasSeleccionadas !== 1 ? "s" : ""} en total
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🌟 VISTA EXCLUSIVA PARA IMPRESIÓN */}
+      {/* 🌟 VISTA EXCLUSIVA PARA IMPRESIÓN (PAGINADA EN BLOQUES DE 25) */}
       <div className="hidden print:block w-full">
         {subTab === "individual" && (
           Array.from({ length: hojas }).map((_, indexHoja) => (
@@ -643,49 +682,19 @@ export default function GenerateQR() {
               ))
             )}
 
-            {/* 🌟 Si HAY elementos seleccionados en el Modal: imprime 1 sola etiqueta grande por cada plantilla seleccionada */}
+            {/* 🌟 Si HAY elementos seleccionados: divide en páginas de exactamente 25 etiquetas (5x5) */}
             {seleccionadosMedia.length > 0 && (
-              <div className="media-large-grid">
-                {seleccionadosMedia.map(m => (
-                  <EtiquetaMediaModalItem key={m._id || m.id} m={m} />
-                ))}
-              </div>
+              paginasMedia.map((paginaItems, indexPagina) => (
+                <div key={indexPagina} className="print-page grid grid-cols-5 gap-1.5 p-2 w-full content-start">
+                  {paginaItems.map((m, index) => (
+                    <EtiquetaMediaModalItem key={`${m._id || m.id}-${indexPagina}-${index}`} m={m} />
+                  ))}
+                </div>
+              ))
             )}
           </>
         )}
       </div>
-
-      {/* 🌟 ESTILOS DE IMPRESIÓN CORREGIDOS Y AJUSTADOS A HOJA COMPLETA */}
-      <style>{`
-        @media print {
-          @page {
-            size: letter portrait;
-            margin: 10mm;
-          }
-          
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-          }
-
-          .media-large-grid {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important;
-            gap: 15px !important;
-            width: 100% !important;
-            box-sizing: border-box !important;
-          }
-
-          .media-large-card {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            box-sizing: border-box !important;
-            width: 100% !important;
-            height: auto !important;
-          }
-        }
-      `}</style>
 
     </div>
   );
