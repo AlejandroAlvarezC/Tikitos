@@ -19,10 +19,10 @@ const buscarProductoPorCodigo = async (codigo) => {
   });
 };
 
-// 📋 GET: Obtener todo el inventario
+// 📋 GET: Obtener todo el inventario (AQUÍ AÑADIMOS allowDiskUse)
 router.get('/', async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const products = await Product.find().sort({ createdAt: -1 }).allowDiskUse(true);
     res.json(products);
   } catch (err) {
     console.error("Error al obtener el inventario:", err);
