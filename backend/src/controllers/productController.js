@@ -60,10 +60,13 @@ export const addProduct = async (req, res) => {
   }
 };
 
-// 2. Obtener todo el inventario
+// 2. Obtener todo el inventario (Con ordenamiento y allowDiskUse para evitar errores de memoria)
 export const getInventory = async (req, res) => {
   try {
-    const products = await Product.find(); 
+    const products = await Product.find()
+      .sort({ createdAt: -1 })
+      .allowDiskUse(true); // 👈 Esto evita el límite de los 32MB en MongoDB Atlas
+      
     res.status(200).json(products);
   } catch (error) {
     console.error("Error al obtener el inventario:", error);
