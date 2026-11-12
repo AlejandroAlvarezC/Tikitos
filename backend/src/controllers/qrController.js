@@ -1,16 +1,25 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-
+// 📋 Obtener todas las plantillas
+export const getTemplates = async (req, res) => {
+  try {
+    const templates = await QrTemplate.find({}).lean();
+    return res.status(200).json(templates || []);
+  } catch (err) {
+    console.warn("⚠️ Aviso al obtener plantillas:", err.message);
+    return res.status(200).json([]);
+  }
+};
 
 // ➕ Crear nueva plantilla
 export const createTemplate = async (req, res) => {
   try {
     const nuevaPlantilla = new QrTemplate(req.body);
     const guardada = await nuevaPlantilla.save();
-    res.status(201).json(guardada);
+    return res.status(201).json(guardada);
   } catch (err) {
     console.error("❌ Error al guardar plantilla:", err.message);
-    res.status(400).json({ error: "Error al guardar la plantilla: " + err.message });
+    return res.status(400).json({ error: "Error al guardar la plantilla" });
   }
 };
 
@@ -21,9 +30,9 @@ export const deleteTemplate = async (req, res) => {
     if (!eliminada) {
       return res.status(404).json({ error: "Plantilla no encontrada" });
     }
-    res.json({ message: "Plantilla eliminada correctamente" });
+    return res.json({ message: "Plantilla eliminada correctamente" });
   } catch (err) {
     console.error("❌ Error al eliminar plantilla:", err.message);
-    res.status(500).json({ error: "Error al eliminar la plantilla" });
+    return res.status(500).json({ error: "Error al eliminar la plantilla" });
   }
 };
