@@ -1,18 +1,19 @@
-// 🌟 Lista de dominios principales permitidos
 const allowedOrigins = [
-  'https://tikitos-neon.vercel.app', // Tu frontend oficial en Vercel
-  'http://localhost:5173',           // Entorno local de Vite
-  'http://localhost:3000'            // Entorno local alternativo
+  'https://tikitos-neon.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://192.168.1.20:5173' // Por si pruebas en red local
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir solicitudes sin origen (Postman, cURL, aplicaciones móviles)
     if (!origin) return callback(null, true);
 
-    // Permitir dominios exactos o cualquier despliegue de preview en Vercel (*.vercel.app)
-    const isVercelPreview = origin.endsWith('.vercel.app');
-    const isAllowed = allowedOrigins.includes(origin) || isVercelPreview;
+    // Remover barra al final si la trae (trailing slash)
+    const cleanOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+
+    const isVercelPreview = cleanOrigin.endsWith('.vercel.app');
+    const isAllowed = allowedOrigins.includes(cleanOrigin) || isVercelPreview;
 
     if (!isAllowed) {
       console.warn(`⚠️ Origen bloqueado por CORS: ${origin}`);
