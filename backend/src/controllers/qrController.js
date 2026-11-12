@@ -1,14 +1,14 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas con manejo seguro de errores
+
+// 📋 Obtener todas las plantillas con allowDiskUse para evitar límite de memoria
 export const getTemplates = async (req, res) => {
   try {
-    // Verificamos que el modelo esté cargado
-    if (!QrTemplate) {
-      return res.status(500).json({ error: "El modelo QrTemplate no está inicializado correctamente." });
-    }
+    const templates = await QrTemplate.find()
+      .sort({ createdAt: -1 })
+      .allowDiskUse(true) // 🌟 Permite superar el límite de 32MB usando disco en MongoDB
+      .lean();
 
-    const templates = await QrTemplate.find().lean().sort({ createdAt: -1 });
     res.json(templates || []);
   } catch (err) {
     console.error("❌ Error crítico en getTemplates:", err.message);
