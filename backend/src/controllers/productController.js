@@ -60,12 +60,10 @@ export const addProduct = async (req, res) => {
   }
 };
 
-// 2. Obtener todo el inventario (Con ordenamiento y allowDiskUse para evitar errores de memoria)
-// 2. Obtener todo el inventario con paginación y límite para proteger la memoria RAM
 export const getInventory = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 100; // Límite seguro por página
+    const limit = parseInt(req.query.limit) || 100;
     const skip = (page - 1) * limit;
 
     const products = await Product.find({}, null, { allowDiskUse: true })
