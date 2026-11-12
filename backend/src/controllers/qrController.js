@@ -1,12 +1,11 @@
 import QrTemplate from '../models/QrTemplate.js';
 
 
-// 📋 Obtener todas las plantillas con allowDiskUse para evitar límite de memoria
 export const getTemplates = async (req, res) => {
   try {
+    // Si la colección es muy grande, evitamos un sort pesado sin índice
     const templates = await QrTemplate.find()
-      .sort({ createdAt: -1 })
-      .allowDiskUse(true) // 🌟 Permite superar el límite de 32MB usando disco en MongoDB
+      .limit(100) // Límite de seguridad
       .lean();
 
     res.json(templates || []);
