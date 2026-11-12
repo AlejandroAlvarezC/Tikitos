@@ -1,61 +1,43 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// Obtener todas las plantillas guardadas
+// 📋 Obtener todas las plantillas con manejo seguro de errores
 export const getTemplates = async (req, res) => {
   try {
-    const templates = await QrTemplate.find();
-    res.status(200).json(templates);
-  } catch (error) {
-    console.error("Error al obtener plantillas QR:", error);
-    res.status(500).json({ message: "Error al consultar la base de datos" });
+    // Verificamos que el modelo esté cargado
+    if (!QrTemplate) {
+      return res.status(500).json({ error: "El modelo QrTemplate no está inicializado correctamente." });
+    }
+
+    const templates = await QrTemplate.find().lean().sort({ createdAt: -1 });
+    res.json(templates || []);
+  } catch (err) {
+    console.error("❌ Error crítico en getTemplates:", err.message);
+    res.status(500).json({ error: "Error interno al obtener las plantillas: " + err.message });
   }
 };
 
-// Crear una nueva plantilla
+// ➕ Crear nueva plantilla
 export const createTemplate = async (req, res) => {
   try {
-    const { tipo, marca, estilo, color, qrCode, imagen, tallas } = req.body;
-    
-    if (!tipo || !marca || !estilo || !color || !qrCode) {
-      return res.status(400).json({ message: "Faltan datos obligatorios" });
-    }
-
-    const existing = await QrTemplate.findOne({ qrCode });
-    if (existing) {
-      return res.status(400).json({ message: "Este código QR ya está guardado." });
-    }
-
-    const newTemplate = new QrTemplate({
-      tipo,
-      marca,
-      estilo,
-      color,
-      qrCode,
-      imagen: imagen || "", // 🌟 Guarda la URL de la foto al crear la plantilla
-      tallas
-    });
-
-    await newTemplate.save();
-    res.status(201).json(newTemplate);
-  } catch (error) {
-    console.error("Error al guardar plantilla QR:", error);
-    res.status(500).json({ message: "Error al guardar en la base de datos" });
+    const nuevaPlantilla = new QrTemplate(req.body);
+    const guardada = await nuevaPlantilla.save();
+    res.status(201).json(guardada);
+  } catch (err) {
+    console.error("❌ Error al guardar plantilla:", err.message);
+    res.status(400).json({ error: "Error al guardar la plantilla: " + err.message });
   }
 };
 
-// Eliminar una plantilla por ID
+// 🗑️ Eliminar plantilla
 export const deleteTemplate = async (req, res) => {
   try {
-    const { id } = req.params;
-    const deleted = await QrTemplate.findByIdAndDelete(id);
-    
-    if (!deleted) {
-      return res.status(404).json({ message: "Plantilla no encontrada" });
+    const eliminada = await QrTemplate.findByIdAndDelete(req.params.id);
+    if (!eliminada) {
+      return res.status(404).json({ error: "Plantilla no encontrada" });
     }
-    
-    res.status(200).json({ message: "Plantilla eliminada correctamente" });
-  } catch (error) {
-    console.error("Error al eliminar plantilla QR:", error);
-    res.status(500).json({ message: "Error al eliminar en la base de datos" });
+    res.json({ message: "Plantilla eliminada correctamente" });
+  } catch (err) {
+    console.error("❌ Error al eliminar plantilla:", err.message);
+    res.status(500).json({ error: "Error al eliminar la plantilla" });
   }
 };
