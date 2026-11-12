@@ -1,23 +1,6 @@
 import QrTemplate from '../models/QrTemplate.js';
 
 
-export const getTemplates = async (req, res) => {
-  try {
-    // Verificamos que la conexión a la BD esté lista
-    if (mongoose.connection.readyState !== 1) {
-      return res.status(500).json({ error: "Base de datos no conectada aún" });
-    }
-
-    // Consulta directa a la colección nativa 'qrtemplates'
-    const db = mongoose.connection.db;
-    const templates = await db.collection('qrtemplates').find({}).toArray();
-
-    res.json(templates || []);
-  } catch (err) {
-    console.error("❌ Error crítico en getTemplates (nativo):", err.message);
-    res.status(500).json({ error: "Error interno: " + err.message });
-  }
-};
 
 // ➕ Crear nueva plantilla
 export const createTemplate = async (req, res) => {
