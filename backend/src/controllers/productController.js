@@ -61,6 +61,7 @@ export const addProduct = async (req, res) => {
 };
 
 export const getInventory = async (req, res) => {
+  console.log("📥 ¡Petición recibida en /api/inventory!");
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
