@@ -7,16 +7,13 @@ const router = express.Router();
 const buscarProductoPorCodigo = async (codigo) => {
   if (!codigo) return null;
   const codigoStr = String(codigo).trim();
-  const esValidoObjectId = /^[0-9a-fA-F]{24}$/.test(codigoStr);
+  const condiciones = [{ qrCode: codigoStr }, { id: codigoStr }, { estilo: codigoStr }];
 
-  return await Product.findOne({
-    $or: [
-      esValidoObjectId ? { _id: codigoStr } : null,
-      { qrCode: codigoStr },
-      { id: codigoStr },
-      { estilo: codigoStr }
-    ].filter(Boolean)
-  });
+  if (/^[0-9a-fA-F]{24}$/.test(codigoStr)) {
+    condiciones.push({ _id: codigoStr });
+  }
+
+  return await Product.findOne({ $or: condiciones });
 };
 
 // 📋 GET: Obtener todo el inventario (AQUÍ AÑADIMOS allowDiskUse)

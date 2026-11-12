@@ -61,16 +61,28 @@ export const addProduct = async (req, res) => {
 };
 
 // 2. Obtener todo el inventario (Con ordenamiento y allowDiskUse para evitar errores de memoria)
+// 2. Obtener todo el inventario con paginación y límite para proteger la memoria RAM
 export const getInventory = async (req, res) => {
   try {
-    const products = await Product.find()
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100; // Límite seguro por página
+    const skip = (page - 1) * limit;
+
+    const products = await Product.find({}, null, { allowDiskUse: true })
       .sort({ createdAt: -1 })
-      .allowDiskUse(true); // 👈 Esto evita el límite de los 32MB en MongoDB Atlas
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Product.countDocuments();
       
-    res.status(200).json(products);
+    res.status(200).json({
+      products,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page
+    });
   } catch (error) {
     console.error("Error al obtener el inventario:", error);
-    res.status(500).json({ message: "Error al consultar la base de datos" });
+    res.status(500).json({ message: "Error al consultar la base de datos: " + error.message });
   }
 };
 
