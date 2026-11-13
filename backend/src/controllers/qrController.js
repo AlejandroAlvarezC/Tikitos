@@ -1,11 +1,12 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas (Con límite de seguridad y .lean())
+// 📋 Obtener todas las plantillas (Con allowDiskUse y límite de seguridad)
 export const getTemplates = async (req, res) => {
   try {
     console.log("📥 [DEBUG] Solicitando plantillas...");
     const templates = await QrTemplate.find({})
       .sort({ createdAt: -1 })
+      .allowDiskUse(true) // 🌟 Vital cuando manejas documentos con imágenes Base64 pesadas
       .limit(50) // 🌟 Evita sobrecargar la memoria con consultas masivas
       .lean();
       
