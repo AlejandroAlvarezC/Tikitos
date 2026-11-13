@@ -77,44 +77,65 @@ export const deleteTemplate = async (req, res) => {
   }
 };
 
-// 🚀 Endpoint temporal para migrar Base64 antiguos a Cloudinary uno por uno
+// 🚀 Migración en segundo plano usando índice cubierto (_id)
 export const migrarImagenesBase64 = async (req, res) => {
+  // 1. Respondemos de inmediato al navegador para evitar timeouts y reintentos de Chrome
+  res.status(200).json({ 
+    mensaje: "Migración iniciada en segundo plano. Revisa la pestaña Logs en Render para ver el progreso." 
+  });
+
   try {
-    console.log("🛠️ Iniciando migración de imágenes Base64 a Cloudinary...");
+    console.log("🛠️ [MIGRACIÓN] Obteniendo IDs directamente del índice en RAM...");
     let plantillasMigradas = 0;
     let productosMigrados = 0;
 
-    // 1. Migrar plantillas
-    const templatesIds = await QrTemplate.find({}).select('_id').lean();
+    // Forzamos a MongoDB a leer SOLO el índice _id sin tocar los documentos en disco
+    const templatesIds = await QrTemplate.find({})
+      .select({ _id: 1 })
+      .hint({ _id: 1 })
+      .lean();
+
+    console.log(`📋 [MIGRACIÓN] Total de plantillas a revisar: ${templatesIds.length}`);
+
     for (const item of templatesIds) {
-      const tpl = await QrTemplate.findById(item._id).lean();
-      if (tpl?.imagen && tpl.imagen.startsWith('data:image')) {
-        const nuevaUrl = await subirImagenACloudinary(tpl.imagen);
-        await QrTemplate.findByIdAndUpdate(item._id, { imagen: nuevaUrl });
-        plantillasMigradas++;
-        console.log(`✅ Plantilla migrada (${plantillasMigradas}): ${item._id}`);
+      try {
+        const tpl = await QrTemplate.findById(item._id).lean();
+        if (tpl?.imagen && tpl.imagen.startsWith('data:image')) {
+          console.log(`⏳ Subiendo imagen de plantilla ${item._id} a Cloudinary...`);
+          const nuevaUrl = await subirImagenACloudinary(tpl.imagen);
+          await QrTemplate.updateOne({ _id: item._id }, { $set: { imagen: nuevaUrl } });
+          plantillasMigradas++;
+          console.log(`✅ Plantilla migrada (${plantillasMigradas}): ${nuevaUrl}`);
+        }
+      } catch (innerErr) {
+        console.error(`⚠️ Error en plantilla ${item._id}:`, innerErr.message);
       }
     }
 
-    // 2. Migrar productos del inventario
-    const productsIds = await Product.find({}).select('_id').lean();
+    const productsIds = await Product.find({})
+      .select({ _id: 1 })
+      .hint({ _id: 1 })
+      .lean();
+
+    console.log(`📦 [MIGRACIÓN] Total de productos a revisar: ${productsIds.length}`);
+
     for (const item of productsIds) {
-      const prod = await Product.findById(item._id).lean();
-      if (prod?.imagen && prod.imagen.startsWith('data:image')) {
-        const nuevaUrl = await subirImagenACloudinary(prod.imagen);
-        await Product.findByIdAndUpdate(item._id, { imagen: nuevaUrl });
-        productosMigrados++;
-        console.log(`✅ Producto migrado (${productosMigrados}): ${item._id}`);
+      try {
+        const prod = await Product.findById(item._id).lean();
+        if (prod?.imagen && prod.imagen.startsWith('data:image')) {
+          console.log(`⏳ Subiendo imagen de producto ${item._id} a Cloudinary...`);
+          const nuevaUrl = await subirImagenACloudinary(prod.imagen);
+          await Product.updateOne({ _id: item._id }, { $set: { imagen: nuevaUrl } });
+          productosMigrados++;
+          console.log(`✅ Producto migrado (${productosMigrados}): ${nuevaUrl}`);
+        }
+      } catch (innerErr) {
+        console.error(`⚠️ Error en producto ${item._id}:`, innerErr.message);
       }
     }
 
-    return res.status(200).json({
-      mensaje: "Migración completada con éxito",
-      plantillasMigradas,
-      productosMigrados
-    });
+    console.log(`🎉 [MIGRACIÓN FINALIZADA] Plantillas: ${plantillasMigradas} | Productos: ${productosMigrados}`);
   } catch (err) {
-    console.error("❌ Error durante la migración:", err.message);
-    return res.status(500).json({ error: "Error en migración: " + err.message });
+    console.error("❌ Error general durante la migración:", err.message);
   }
 };
