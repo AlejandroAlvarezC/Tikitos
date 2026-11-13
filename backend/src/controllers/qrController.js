@@ -1,13 +1,16 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas
+// 📋 Obtener todas las plantillas (Con logs de depuración)
 export const getTemplates = async (req, res) => {
+  console.log("📥 [DEBUG] La petición GET /api/qr-templates llegó al controlador.");
   try {
-    const templates = await QrTemplate.find({}).sort({ createdAt: -1 });
+    console.log("🔍 [DEBUG] Ejecutando QrTemplate.find()...");
+    const templates = await QrTemplate.find({}).sort({ createdAt: -1 }).lean();
+    console.log(`✅ [DEBUG] Plantillas encontradas: ${templates.length}`);
     return res.status(200).json(templates);
   } catch (err) {
-    console.error("❌ Error al obtener plantillas:", err.message);
-    return res.status(500).json({ error: "Error al obtener las plantillas" });
+    console.error("❌ [ERROR INTERNO] Capturado en catch:", err.message, err.stack);
+    return res.status(500).json({ error: "Error al obtener las plantillas: " + err.message });
   }
 };
 
@@ -23,17 +26,15 @@ export const createTemplate = async (req, res) => {
   }
 };
 
-// ✏️ Actualizar una plantilla existente por ID (sin romper documentos antiguos)
+// ✏️ Actualizar una plantilla existente por ID
 export const updateTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    
     const actualizada = await QrTemplate.findByIdAndUpdate(
       id, 
       req.body, 
       { new: true, runValidators: false }
     );
-    
     if (!actualizada) {
       return res.status(404).json({ error: "Plantilla no encontrada" });
     }
@@ -49,7 +50,6 @@ export const deleteTemplate = async (req, res) => {
   try {
     const { id } = req.params;
     const eliminada = await QrTemplate.findByIdAndDelete(id);
-    
     if (!eliminada) {
       return res.status(404).json({ error: "Plantilla no encontrada" });
     }
