@@ -1,9 +1,9 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas
+// 📋 Obtener todas las plantillas (Optimizado con .lean() para mejor rendimiento y memoria)
 export const getTemplates = async (req, res) => {
   try {
-    const templates = await QrTemplate.find({}).sort({ createdAt: -1 });
+    const templates = await QrTemplate.find({}).sort({ createdAt: -1 }).lean();
     return res.status(200).json(templates);
   } catch (err) {
     console.error("❌ Error al obtener plantillas:", err.message);
