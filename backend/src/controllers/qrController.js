@@ -1,15 +1,18 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas (Con logs de depuración)
+// 📋 Obtener todas las plantillas (Con límite de seguridad y .lean())
 export const getTemplates = async (req, res) => {
-  console.log("📥 [DEBUG] La petición GET /api/qr-templates llegó al controlador.");
   try {
-    console.log("🔍 [DEBUG] Ejecutando QrTemplate.find()...");
-    const templates = await QrTemplate.find({}).sort({ createdAt: -1 }).lean();
-    console.log(`✅ [DEBUG] Plantillas encontradas: ${templates.length}`);
+    console.log("📥 [DEBUG] Solicitando plantillas...");
+    const templates = await QrTemplate.find({})
+      .sort({ createdAt: -1 })
+      .limit(50) // 🌟 Evita sobrecargar la memoria con consultas masivas
+      .lean();
+      
+    console.log(`✅ [DEBUG] Se enviaron ${templates.length} plantillas.`);
     return res.status(200).json(templates);
   } catch (err) {
-    console.error("❌ [ERROR INTERNO] Capturado en catch:", err.message, err.stack);
+    console.error("❌ Error al obtener plantillas:", err.message);
     return res.status(500).json({ error: "Error al obtener las plantillas: " + err.message });
   }
 };

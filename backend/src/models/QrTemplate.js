@@ -1,31 +1,18 @@
 import mongoose from 'mongoose';
 
 const qrTemplateSchema = new mongoose.Schema({
-  nombre: { 
-    type: String, 
-    required: [true, 'El campo nombre es obligatorio'], 
-    trim: true 
-  },
-  contenido: { 
-    type: String, 
-    default: '' 
-  },
-  ancho: { 
-    type: Number, 
-    default: 200 
-  },
-  alto: { 
-    type: Number, 
-    default: 200 
-  },
-  elementos: { 
-    type: Array, 
-    default: [] 
+  tipo: { type: String, required: true }, // 'individual' o 'media'
+  nombre: { type: String },
+  marca: { type: String, required: true },
+  estilo: { type: String, required: true },
+  color: { type: String, required: true },
+  qrCode: { type: String, unique: true, sparse: true },
+  imagen: { type: String }, // Base64
+  tallas: {
+    type: Object,
+    default: { "10": 2, "11": 2, "12": 2 }
   }
-}, {
-  timestamps: true // Añade automáticamente createdAt y updatedAt
-});
+}, { timestamps: true }); // 🌟 Esto crea automáticamente 'createdAt' e 'updatedAt' optimizados con índices
 
 const QrTemplate = mongoose.model('QrTemplate', qrTemplateSchema);
-
 export default QrTemplate;
