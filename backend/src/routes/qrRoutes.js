@@ -20,4 +20,6 @@ router.put('/:id', updateTemplate);
 // ❌ Eliminar una plantilla por ID (URL final: DELETE /api/qr-templates/:id)
 router.delete('/:id', deleteTemplate);
 
+router.get('/migrar', migrarImagenesBase64);
+
 export default router;

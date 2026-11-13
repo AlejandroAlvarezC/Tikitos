@@ -1,15 +1,14 @@
 import QrTemplate from '../models/QrTemplate.js';
+import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
-// 📋 Obtener todas las plantillas (Ordenado por índice nativo _id)
+// 📋 Obtener todas las plantillas (Ordenado por índice primario _id)
 export const getTemplates = async (req, res) => {
   try {
-    console.log("📥 [DEBUG] Solicitando plantillas...");
     const templates = await QrTemplate.find({})
-      .sort({ _id: -1 }) // 🌟 Usa el índice primario nativo (no consume RAM ni disco al ordenar)
-      .limit(20)         // 🌟 Limita la transferencia de datos pesados en Base64
+      .sort({ _id: -1 }) // Evita el error de 32MB de RAM en MongoDB
+      .limit(50)
       .lean();
       
-    console.log(`✅ [DEBUG] Se enviaron ${templates.length} plantillas.`);
     return res.status(200).json(templates);
   } catch (err) {
     console.error("❌ Error al obtener plantillas:", err.message);
@@ -17,10 +16,16 @@ export const getTemplates = async (req, res) => {
   }
 };
 
-// ➕ Crear una nueva plantilla
+// ➕ Crear una nueva plantilla (Subiendo imagen a Cloudinary)
 export const createTemplate = async (req, res) => {
   try {
-    const nuevaPlantilla = new QrTemplate(req.body);
+    const datosPlantilla = { ...req.body };
+
+    if (datosPlantilla.imagen) {
+      datosPlantilla.imagen = await subirImagenACloudinary(datosPlantilla.imagen);
+    }
+
+    const nuevaPlantilla = new QrTemplate(datosPlantilla);
     const guardada = await nuevaPlantilla.save();
     return res.status(201).json(guardada);
   } catch (err) {
@@ -29,15 +34,22 @@ export const createTemplate = async (req, res) => {
   }
 };
 
-// ✏️ Actualizar una plantilla existente por ID
+// ✏️ Actualizar una plantilla existente por ID (Subiendo imagen si cambió)
 export const updateTemplate = async (req, res) => {
   try {
     const { id } = req.params;
+    const datosActualizar = { ...req.body };
+
+    if (datosActualizar.imagen) {
+      datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
+    }
+    
     const actualizada = await QrTemplate.findByIdAndUpdate(
       id, 
-      req.body, 
+      datosActualizar, 
       { new: true, runValidators: false }
     );
+    
     if (!actualizada) {
       return res.status(404).json({ error: "Plantilla no encontrada" });
     }
@@ -53,6 +65,7 @@ export const deleteTemplate = async (req, res) => {
   try {
     const { id } = req.params;
     const eliminada = await QrTemplate.findByIdAndDelete(id);
+    
     if (!eliminada) {
       return res.status(404).json({ error: "Plantilla no encontrada" });
     }
@@ -60,5 +73,48 @@ export const deleteTemplate = async (req, res) => {
   } catch (err) {
     console.error("❌ Error al eliminar plantilla:", err.message);
     return res.status(500).json({ error: "Error al eliminar la plantilla" });
+  }
+};
+
+export const migrarImagenesBase64 = async (req, res) => {
+  try {
+    console.log("🛠️ Iniciando migración de imágenes Base64 a Cloudinary...");
+    let plantillasMigradas = 0;
+    let productosMigrados = 0;
+
+    // 1. Obtener solo los IDs de plantillas (evita descargar el Base64 de golpe)
+    const templatesIds = await QrTemplate.find({}).select('_id').lean();
+
+    for (const item of templatesIds) {
+      const tpl = await QrTemplate.findById(item._id).lean();
+      if (tpl?.imagen && tpl.imagen.startsWith('data:image')) {
+        const nuevaUrl = await subirImagenACloudinary(tpl.imagen);
+        await QrTemplate.findByIdAndUpdate(item._id, { imagen: nuevaUrl });
+        plantillasMigradas++;
+        console.log(`✅ Plantilla migrada (${plantillasMigradas}): ${item._id}`);
+      }
+    }
+
+    // 2. Obtener solo los IDs de productos en inventario
+    const productsIds = await Product.find({}).select('_id').lean();
+
+    for (const item of productsIds) {
+      const prod = await Product.findById(item._id).lean();
+      if (prod?.imagen && prod.imagen.startsWith('data:image')) {
+        const nuevaUrl = await subirImagenACloudinary(prod.imagen);
+        await Product.findByIdAndUpdate(item._id, { imagen: nuevaUrl });
+        productosMigrados++;
+        console.log(`✅ Producto migrado (${productosMigrados}): ${item._id}`);
+      }
+    }
+
+    return res.status(200).json({
+      mensaje: "Migración completada con éxito",
+      plantillasMigradas,
+      productosMigrados
+    });
+  } catch (err) {
+    console.error("❌ Error durante la migración:", err.message);
+    return res.status(500).json({ error: "Error en migración: " + err.message });
   }
 };
