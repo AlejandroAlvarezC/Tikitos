@@ -16,6 +16,9 @@ export default function GenerateQR() {
   });
   const [hojasMedia, setHojasMedia] = useState(1);
   const [modelosMediaGuardados, setModelosMediaGuardados] = useState([]);
+  
+  // 🌟 Estado para controlar si estamos editando una plantilla existente (PUT)
+  const [editingId, setEditingId] = useState(null);
 
   // 🌟 Estados para el Modal de Impresión de Media Docena (Almacena { [id]: cantidad })
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -91,7 +94,7 @@ export default function GenerateQR() {
     }
   };
 
- const handleGuardarModelo = async (tipo) => {
+  const handleGuardarModelo = async (tipo) => {
     const dataActual = tipo === "individual" ? formData : mediaFormData;
 
     // 🌟 Generamos un nombre descriptivo automático si no viene especificado
@@ -107,8 +110,15 @@ export default function GenerateQR() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/qr-templates`, {
-        method: "POST",
+      // 🌟 Si tenemos un editingId usamos PUT (actualizar), de lo contrario POST (crear)
+      const url = editingId 
+        ? `${API_URL}/api/qr-templates/${editingId}` 
+        : `${API_URL}/api/qr-templates`;
+        
+      const method = editingId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
@@ -120,12 +130,15 @@ export default function GenerateQR() {
 
       await fetchTemplates();
 
+      // Limpiamos formularios y salimos del modo edición
+      setEditingId(null);
       if (tipo === "individual") {
         setFormData({ qrCode: "", estilo: "", color: "", marca: "", imagen: "" });
       } else {
         setMediaFormData({ qrCode: "", estilo: "", color: "", marca: "", tallas: { "10": 2, "11": 2, "12": 2 }, imagen: "" });
       }
-      alert("¡Plantilla y foto guardadas con éxito en el servidor!");
+      
+      alert(editingId ? "¡Plantilla actualizada con éxito!" : "¡Plantilla y foto guardadas con éxito en el servidor!");
     } catch (err) {
       alert(err.message);
     }
@@ -193,7 +206,6 @@ export default function GenerateQR() {
     </div>
   );
 
-  // 🌟 Etiqueta compacta optimizada para 5 columnas (5x5 por hoja = 25 unidades)
   const EtiquetaMediaModalItem = ({ m }) => (
     <div className="media-large-card bg-white p-1.5 border border-purple-300 rounded-lg text-center flex flex-col items-center justify-center relative page-break-inside-avoid shadow-sm">
       <span className="absolute top-1 right-1 bg-purple-100 text-purple-800 text-[7px] font-bold px-1 py-0.2 rounded">
@@ -219,7 +231,6 @@ export default function GenerateQR() {
     </div>
   );
 
-  // Generamos una lista plana duplicando cada plantilla según la cantidad elegida
   const seleccionadosMedia = modelosMediaGuardados.flatMap(m => {
     const id = m._id || m.id;
     const cantidad = selectedMediaForPrint[id];
@@ -227,7 +238,6 @@ export default function GenerateQR() {
     return Array.from({ length: cantidad }, () => m);
   });
 
-  // Agrupamos en bloques exactos de 25 para que cada hoja impresa contenga una cuadrícula completa de 5x5
   const paginasMedia = [];
   for (let i = 0; i < seleccionadosMedia.length; i += 25) {
     paginasMedia.push(seleccionadosMedia.slice(i, i + 25));
@@ -270,9 +280,14 @@ export default function GenerateQR() {
         {subTab === "individual" && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-gray-700 text-sm">Configuración - Individual</h3>
+              <h3 className="font-bold text-gray-700 text-sm">
+                {editingId ? "✏️ Editando Plantilla Individual" : "Configuración - Individual"}
+              </h3>
               <button 
-                onClick={() => setFormData({ qrCode: "", estilo: "", color: "", marca: "", imagen: "" })}
+                onClick={() => {
+                  setFormData({ qrCode: "", estilo: "", color: "", marca: "", imagen: "" });
+                  setEditingId(null);
+                }}
                 className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium cursor-pointer"
               >
                 ✨ Limpiar Formulario
@@ -329,9 +344,11 @@ export default function GenerateQR() {
                 </div>
                 <button
                   onClick={() => handleGuardarModelo("individual")}
-                  className="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded-lg border border-blue-300 transition text-sm cursor-pointer"
+                  className={`w-full font-bold py-2 px-4 rounded-lg border transition text-sm cursor-pointer ${
+                    editingId ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300" : "bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300"
+                  }`}
                 >
-                  💾 Guardar Plantilla en Servidor
+                  {editingId ? "💾 Actualizar Plantilla en Servidor" : "💾 Guardar Plantilla en Servidor"}
                 </button>
               </div>
 
@@ -375,9 +392,12 @@ export default function GenerateQR() {
                     return (
                       <div 
                         key={id}
-                        onClick={() => setFormData(m)}
+                        onClick={() => {
+                          setFormData(m);
+                          setEditingId(id); // 🌟 Activamos la edición con el ID correspondiente
+                        }}
                         className={`p-2.5 rounded-lg border cursor-pointer transition relative group ${
-                          formData.qrCode === m.qrCode ? "border-blue-500 bg-blue-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
+                          editingId === id ? "border-amber-500 bg-amber-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
                         }`}
                       >
                         <button onClick={(e) => handleEliminarModelo(id, e)} className="absolute top-1.5 right-1.5 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 text-xs">✖</button>
@@ -396,9 +416,14 @@ export default function GenerateQR() {
         {subTab === "media" && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-purple-900 text-sm">Configuración - Media Docena (6 Pares con Tallas)</h3>
+              <h3 className="font-bold text-purple-900 text-sm">
+                {editingId ? "✏️ Editando Plantilla Media Docena" : "Configuración - Media Docena (6 Pares con Tallas)"}
+              </h3>
               <button 
-                onClick={() => setMediaFormData({ qrCode: "", estilo: "", color: "", marca: "", tallas: { "10": 2, "11": 2, "12": 2 }, imagen: "" })}
+                onClick={() => {
+                  setMediaFormData({ qrCode: "", estilo: "", color: "", marca: "", tallas: { "10": 2, "11": 2, "12": 2 }, imagen: "" });
+                  setEditingId(null);
+                }}
                 className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium cursor-pointer"
               >
                 ✨ Limpiar Formulario
@@ -483,9 +508,11 @@ export default function GenerateQR() {
 
                 <button
                   onClick={() => handleGuardarModelo("media")}
-                  className="w-full bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold py-2 px-4 rounded-lg border border-purple-300 transition text-sm cursor-pointer"
+                  className={`w-full font-bold py-2 px-4 rounded-lg border transition text-sm cursor-pointer ${
+                    editingId ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300" : "bg-purple-100 hover:bg-purple-200 text-purple-900 border-purple-300"
+                  }`}
                 >
-                  💾 Guardar Plantilla en Servidor
+                  {editingId ? "💾 Actualizar Plantilla en Servidor" : "💾 Guardar Plantilla en Servidor"}
                 </button>
               </div>
 
@@ -528,9 +555,12 @@ export default function GenerateQR() {
                     return (
                       <div 
                         key={id}
-                        onClick={() => setMediaFormData(m)}
+                        onClick={() => {
+                          setMediaFormData(m);
+                          setEditingId(id); // 🌟 Activamos la edición con el ID correspondiente
+                        }}
                         className={`p-2.5 rounded-lg border cursor-pointer transition relative group ${
-                          mediaFormData.qrCode === m.qrCode ? "border-purple-500 bg-purple-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
+                          editingId === id ? "border-amber-500 bg-amber-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
                         }`}
                       >
                         <button onClick={(e) => handleEliminarModelo(id, e)} className="absolute top-1.5 right-1.5 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 text-xs">✖</button>
@@ -604,7 +634,6 @@ export default function GenerateQR() {
                         </div>
                       </div>
 
-                      {/* Selector con opción de 20, 25 y 50 */}
                       <div>
                         {isChecked ? (
                           <select
@@ -637,67 +666,52 @@ export default function GenerateQR() {
             </div>
 
             <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
-              <button
-                onClick={() => setIsPrintModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl text-sm transition cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={totalEtiquetasSeleccionadas === 0}
-                onClick={() => {
-                  setIsPrintModalOpen(false);
-                  setTimeout(() => window.print(), 200);
-                }}
-                className={`px-6 py-2 font-bold rounded-xl text-sm transition shadow-sm cursor-pointer flex items-center gap-2 ${
-                  totalEtiquetasSeleccionadas > 0 
-                    ? "bg-purple-600 hover:bg-purple-700 text-white" 
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                🖨️ Imprimir {totalEtiquetasSeleccionadas} Etiqueta{totalEtiquetasSeleccionadas !== 1 ? "s" : ""} en total
-              </button>
+              <span className="text-xs font-bold text-gray-700">
+                Total etiquetas a imprimir: <span className="text-purple-700">{totalEtiquetasSeleccionadas}</span> ({paginasMedia.length} {paginasMedia.length === 1 ? 'hoja' : 'hojas'})
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-lg text-xs transition cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => {
+                    setIsPrintModalOpen(false);
+                    setTimeout(() => window.print(), 300);
+                  }}
+                  disabled={paginasMedia.length === 0}
+                  className={`px-4 py-2 font-bold rounded-lg text-xs transition shadow flex items-center gap-2 ${
+                    paginasMedia.length > 0 ? "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer" : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  🖨️ Imprimir Selección
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🌟 VISTA EXCLUSIVA PARA IMPRESIÓN (PAGINADA EN BLOQUES DE 25) */}
-      <div className="hidden print:block w-full">
-        {subTab === "individual" && (
-          Array.from({ length: hojas }).map((_, indexHoja) => (
-            <div key={indexHoja} className="print-page">
-              {Array.from({ length: 24 }).map((_, indexEtiqueta) => (
-                <EtiquetaIndividual key={indexEtiqueta} />
+      {/* ZONA DE IMPRESIÓN OCULTA (SE MUESTRA AL LLAMAR A window.print()) */}
+      <div className="hidden print:block">
+        {subTab === "individual" ? (
+          Array.from({ length: hojas }).map((_, hojaIndex) => (
+            <div key={hojaIndex} className="print-page grid grid-cols-4 gap-2 p-4 break-after-page items-center justify-items-center">
+              {Array.from({ length: 24 }).map((_, i) => (
+                <EtiquetaIndividual key={i} />
               ))}
             </div>
           ))
-        )}
-
-        {subTab === "media" && (
-          <>
-            {/* Si NO hay selección del modal, imprime la planilla completa por defecto */}
-            {seleccionadosMedia.length === 0 && (
-              Array.from({ length: hojasMedia }).map((_, indexHoja) => (
-                <div key={indexHoja} className="print-page">
-                  {Array.from({ length: 24 }).map((_, indexEtiqueta) => (
-                    <EtiquetaMedia key={indexEtiqueta} />
-                  ))}
-                </div>
-              ))
-            )}
-
-            {/* 🌟 Si HAY elementos seleccionados: divide en páginas de exactamente 25 etiquetas (5x5) */}
-            {seleccionadosMedia.length > 0 && (
-              paginasMedia.map((paginaItems, indexPagina) => (
-                <div key={indexPagina} className="print-page grid grid-cols-5 gap-1.5 p-2 w-full content-start">
-                  {paginaItems.map((m, index) => (
-                    <EtiquetaMediaModalItem key={`${m._id || m.id}-${indexPagina}-${index}`} m={m} />
-                  ))}
-                </div>
-              ))
-            )}
-          </>
+        ) : (
+          paginasMedia.map((paginaItems, hojaIndex) => (
+            <div key={hojaIndex} className="print-page grid grid-cols-5 gap-1.5 p-2 break-after-page items-center justify-items-center">
+              {paginaItems.map((m, i) => (
+                <EtiquetaMediaModalItem key={i} m={m} />
+              ))}
+            </div>
+          ))
         )}
       </div>
 
