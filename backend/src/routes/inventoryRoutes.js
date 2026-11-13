@@ -16,14 +16,14 @@ const buscarProductoPorCodigo = async (codigo) => {
   return await Product.findOne({ $or: condiciones });
 };
 
-// 📋 GET: Obtener todo el inventario optimizado (Evita que la red colapse por las imágenes en base64)
+// 📋 GET: Obtener inventario con imágenes limitando la carga por lote
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find()
-      .select('-imagen') // 🌟 Excluye el campo de imagen pesada para que la lista cargue al instante
-      .lean()             // 🌟 Convierte los documentos en objetos planos de JS (máxima velocidad)
+      // 🌟 Quitamos .select('-imagen') para que SÍ incluya las fotos
+      .lean()             
       .sort({ createdAt: -1 })
-      .limit(100);        // Límite de seguridad para evitar sobrecarga de red
+      .limit(15);        // 🌟 Límite seguro de 15 elementos para que las imágenes base64 viajen sin saturar la red
 
     res.json(products);
   } catch (err) {
