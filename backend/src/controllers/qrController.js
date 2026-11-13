@@ -14,18 +14,18 @@ export const getTemplates = async (req, res) => {
   }
 };
 
-// ➕ Crear nueva plantilla
+// ➕ Crear nueva plantilla (con detalle de error de validación)
 export const createTemplate = async (req, res) => {
   try {
     const nuevaPlantilla = new QrTemplate(req.body);
     const guardada = await nuevaPlantilla.save();
     return res.status(201).json(guardada);
   } catch (err) {
-    console.error("❌ Error al guardar plantilla:", err.message);
-    return res.status(400).json({ error: "Error al guardar la plantilla" });
+    console.error("❌ Error al guardar plantilla:", err);
+    // 🌟 Mostramos el error exacto de Mongoose para saber qué campo falta
+    return res.status(400).json({ error: "Error al guardar la plantilla: " + err.message });
   }
 };
-
 // 🗑️ Eliminar plantilla
 export const deleteTemplate = async (req, res) => {
   try {
