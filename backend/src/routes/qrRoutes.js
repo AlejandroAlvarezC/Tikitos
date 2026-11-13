@@ -8,16 +8,16 @@ import {
 
 const router = express.Router();
 
-// 📋 Obtener todas las plantillas
-router.get('/qr-templates', getTemplates);
+// 📋 Obtener todas las plantillas (URL final: GET /api/qr-templates)
+router.get('/', getTemplates);
 
-// ➕ Crear una nueva plantilla
-router.post('/qr-templates', createTemplate);
+// ➕ Crear una nueva plantilla (URL final: POST /api/qr-templates)
+router.post('/', createTemplate);
 
-// ✏️ Actualizar una plantilla existente por ID (PUT)
-router.put('/qr-templates/:id', updateTemplate);
+// ✏️ Actualizar una plantilla existente por ID (URL final: PUT /api/qr-templates/:id)
+router.put('/:id', updateTemplate);
 
-// ❌ Eliminar una plantilla por ID
-router.delete('/qr-templates/:id', deleteTemplate);
+// ❌ Eliminar una plantilla por ID (URL final: DELETE /api/qr-templates/:id)
+router.delete('/:id', deleteTemplate);
 
 export default router;
