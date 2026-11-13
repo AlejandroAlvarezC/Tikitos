@@ -1,13 +1,12 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas (Con allowDiskUse y límite de seguridad)
+// 📋 Obtener todas las plantillas (Ordenado por índice nativo _id)
 export const getTemplates = async (req, res) => {
   try {
     console.log("📥 [DEBUG] Solicitando plantillas...");
     const templates = await QrTemplate.find({})
-      .sort({ createdAt: -1 })
-      .allowDiskUse(true) // 🌟 Vital cuando manejas documentos con imágenes Base64 pesadas
-      .limit(50) // 🌟 Evita sobrecargar la memoria con consultas masivas
+      .sort({ _id: -1 }) // 🌟 Usa el índice primario nativo (no consume RAM ni disco al ordenar)
+      .limit(20)         // 🌟 Limita la transferencia de datos pesados en Base64
       .lean();
       
     console.log(`✅ [DEBUG] Se enviaron ${templates.length} plantillas.`);
