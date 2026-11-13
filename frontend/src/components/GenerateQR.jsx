@@ -91,10 +91,15 @@ export default function GenerateQR() {
     }
   };
 
-  const handleGuardarModelo = async (tipo) => {
+ const handleGuardarModelo = async (tipo) => {
+    const dataActual = tipo === "individual" ? formData : mediaFormData;
+
+    // 🌟 Generamos un nombre descriptivo automático si no viene especificado
+    const nombrePlantilla = dataActual.nombre || `${dataActual.marca} - ${dataActual.estilo} (${dataActual.color})`.trim();
+
     const payload = tipo === "individual" 
-      ? { ...formData, tipo: "individual" } 
-      : { ...mediaFormData, tipo: "media" };
+      ? { ...formData, nombre: nombrePlantilla, tipo: "individual" } 
+      : { ...mediaFormData, nombre: nombrePlantilla, tipo: "media" };
 
     if (!payload.qrCode || !payload.marca) {
       alert("Asigna una Marca y un Código Único antes de guardar.");
@@ -110,7 +115,7 @@ export default function GenerateQR() {
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.message || "Error al guardar");
+        throw new Error(errData.message || errData.error || "Error al guardar");
       }
 
       await fetchTemplates();
