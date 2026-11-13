@@ -12,7 +12,10 @@ const qrTemplateSchema = new mongoose.Schema({
     type: Object,
     default: { "10": 2, "11": 2, "12": 2 }
   }
-}, { timestamps: true }); // 🌟 Esto crea automáticamente 'createdAt' e 'updatedAt' optimizados con índices
+}, { timestamps: true }); 
+
+// 🌟 Creamos un índice físico ordenado descendentemente para evitar errores de memoria en el sort
+qrTemplateSchema.index({ createdAt: -1 });
 
 const QrTemplate = mongoose.model('QrTemplate', qrTemplateSchema);
 export default QrTemplate;
