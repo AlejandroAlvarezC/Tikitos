@@ -1,17 +1,31 @@
 import mongoose from 'mongoose';
 
 const qrTemplateSchema = new mongoose.Schema({
-  tipo: { type: String, enum: ['individual', 'media'], required: true },
-  marca: { type: String, required: true },
-  estilo: { type: String, required: true },
-  color: { type: String, required: true },
-  qrCode: { type: String, required: true, unique: true },
-  imagen: { type: String, default: "" }, // 🌟 Campo nuevo para guardar la foto
-  tallas: {
-    type: Map,
-    of: Number,
-    default: undefined
+  nombre: { 
+    type: String, 
+    required: [true, 'El campo nombre es obligatorio'], 
+    trim: true 
+  },
+  contenido: { 
+    type: String, 
+    default: '' 
+  },
+  ancho: { 
+    type: Number, 
+    default: 200 
+  },
+  alto: { 
+    type: Number, 
+    default: 200 
+  },
+  elementos: { 
+    type: Array, 
+    default: [] 
   }
-}, { timestamps: true });
+}, {
+  timestamps: true // Añade automáticamente createdAt y updatedAt
+});
 
-export default mongoose.model('QrTemplate', qrTemplateSchema);
+const QrTemplate = mongoose.model('QrTemplate', qrTemplateSchema);
+
+export default QrTemplate;
