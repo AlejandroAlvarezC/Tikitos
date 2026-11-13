@@ -16,14 +16,13 @@ const buscarProductoPorCodigo = async (codigo) => {
   return await Product.findOne({ $or: condiciones });
 };
 
-// 📋 GET: Obtener inventario con imágenes limitando la carga por lote
+// 📋 GET: Obtener inventario con un límite seguro de 4 elementos para evitar colgar la red
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find()
-      // 🌟 Quitamos .select('-imagen') para que SÍ incluya las fotos
       .lean()             
       .sort({ createdAt: -1 })
-      .limit(15);        // 🌟 Límite seguro de 15 elementos para que las imágenes base64 viajen sin saturar la red
+      .limit(4);        // 🌟 Reducido a 4 para que las imágenes base64 pesen muy poco al viajar
 
     res.json(products);
   } catch (err) {
