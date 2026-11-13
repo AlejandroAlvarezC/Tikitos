@@ -1,9 +1,12 @@
 import QrTemplate from '../models/QrTemplate.js';
 
-// 📋 Obtener todas las plantillas
 export const getTemplates = async (req, res) => {
   try {
-    const templates = await QrTemplate.find({}).lean();
+    // Excluimos la imagen (-imagen) para que la respuesta sea súper ligera y rápida
+    const templates = await QrTemplate.find({})
+      .select('-imagen') 
+      .lean();
+
     return res.status(200).json(templates || []);
   } catch (err) {
     console.warn("⚠️ Aviso al obtener plantillas:", err.message);
