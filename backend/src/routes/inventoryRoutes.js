@@ -1,5 +1,6 @@
 import express from 'express';
 import Product from '../models/Product.js';
+import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
 const router = express.Router();
 
@@ -16,13 +17,13 @@ const buscarProductoPorCodigo = async (codigo) => {
   return await Product.findOne({ $or: condiciones });
 };
 
-// 📋 GET: Obtener inventario con un límite seguro de 4 elementos para evitar colgar la red
+// 📋 GET: Obtener todo el inventario con URLs ligeras de Cloudinary y allowDiskUse
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find()
       .lean()             
       .sort({ createdAt: -1 })
-      .limit(4);        // 🌟 Reducido a 4 para que las imágenes base64 pesen muy poco al viajar
+      .allowDiskUse(true); // 🌟 Previene errores de memoria en MongoDB Atlas al ordenar catálogos completos
 
     res.json(products);
   } catch (err) {
@@ -31,33 +32,50 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ➕ POST: Agregar un nuevo producto manualmente
+// ➕ POST: Agregar un nuevo producto manualmente (con subida a Cloudinary)
 router.post('/', async (req, res) => {
   try {
-    const nuevoProducto = new Product(req.body);
+    const { imagen, ...restoDatos } = req.body;
+    
+    // 🌟 Subimos la imagen a Cloudinary (si es base64) y obtenemos la URL ligera
+    const imagenUrl = await subirImagenACloudinary(imagen);
+
+    const nuevoProducto = new Product({
+      ...restoDatos,
+      imagen: imagenUrl
+    });
+
     const productoGuardado = await nuevoProducto.save();
     res.status(201).json(productoGuardado);
   } catch (err) {
     console.error("Error al guardar el producto:", err);
-    res.status(400).json({ error: "Error al guardar el producto" });
+    res.status(400).json({ error: "Error al guardar el producto: " + err.message });
   }
 });
 
-// ✏️ PUT: Actualizar un producto
+// ✏️ PUT: Actualizar un producto (con subida a Cloudinary si cambia la imagen)
 router.put('/:id', async (req, res) => {
   try {
+    let datosActualizar = { ...req.body };
+
+    // Si viene una nueva imagen en base64, la subimos a Cloudinary primero
+    if (datosActualizar.imagen) {
+      datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
+    }
+
     const productoActualizado = await Product.findByIdAndUpdate(
       req.params.id, 
-      req.body, 
+      datosActualizar, 
       { new: true }
     );
+
     if (!productoActualizado) {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
     res.json(productoActualizado);
   } catch (err) {
     console.error("Error al actualizar:", err);
-    res.status(400).json({ error: "Error al actualizar el producto" });
+    res.status(400).json({ error: "Error al actualizar el producto: " + err.message });
   }
 });
 
@@ -75,7 +93,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// ➕ POST: Registrar entrada (sumar 6 pares si es media)
+// ➕ POST: Registrar entrada (con subida automática a Cloudinary)
 router.post('/scan-entry', async (req, res) => {
   try {
     const { codigo, marca, estilo, color, pares, imagen } = req.body;
@@ -84,6 +102,9 @@ router.post('/scan-entry', async (req, res) => {
     const codigoStr = String(codigo).trim();
     let item = await buscarProductoPorCodigo(codigoStr);
 
+    // 🌟 Subimos la imagen a Cloudinary si viene incluida
+    const imagenUrl = await subirImagenACloudinary(imagen);
+
     const esMedia = codigoStr.toUpperCase().includes('MEDIA') || (item?.estilo && String(item.estilo).toUpperCase().includes('MEDIA'));
     const cantidadSumar = Number(pares) || (esMedia ? 6 : 1);
 
@@ -91,7 +112,7 @@ router.post('/scan-entry', async (req, res) => {
       item.pares = Number(item.pares || 0) + cantidadSumar;
       if (marca) item.marca = String(marca);
       if (color) item.color = String(color);
-      if (imagen) item.imagen = String(imagen);
+      if (imagenUrl) item.imagen = String(imagenUrl);
       if (!item.qrCode) item.qrCode = codigoStr;
       await item.save();
       return res.json({
@@ -114,7 +135,7 @@ router.post('/scan-entry', async (req, res) => {
         estilo: estiloFinal,
         color: color ? String(color) : "Estándar",
         pares: nuevaCantidad,
-        imagen: imagen ? String(imagen) : ""
+        imagen: imagenUrl ? String(imagenUrl) : ""
       });
       const guardado = await nuevoProducto.save();
       return res.status(201).json({
@@ -142,7 +163,6 @@ router.post('/scan-exit', async (req, res) => {
       return res.status(404).json({ error: `❌ El código "${codigoStr}" no está registrado en el inventario.` });
     }
 
-    // 🔍 Verificamos si es media revisando tanto el código como los campos guardados en la BD
     const esMedia = 
       codigoStr.toUpperCase().includes('MEDIA') || 
       (item.qrCode && String(item.qrCode).toUpperCase().includes('MEDIA')) ||

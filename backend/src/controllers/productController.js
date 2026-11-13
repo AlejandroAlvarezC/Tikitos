@@ -1,6 +1,7 @@
 import Product from '../models/Product.js';
+import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
-// 1. Agregar o acumular producto si el QR ya existe
+// 1. Agregar o acumular producto si el QR ya existe (con Cloudinary)
 export const addProduct = async (req, res) => {
   try {
     const { qrCode, estilo, color, pares, marca, imagen, tallas } = req.body;
@@ -8,6 +9,9 @@ export const addProduct = async (req, res) => {
     if (!qrCode || !estilo || !color || !marca) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
+
+    // 🌟 Subimos la imagen a Cloudinary (si es base64) y obtenemos la URL ligera
+    const imagenUrl = await subirImagenACloudinary(imagen);
 
     // Buscar si ya existe un producto con este mismo código QR
     let existingProduct = await Product.findOne({ qrCode });
@@ -17,7 +21,7 @@ export const addProduct = async (req, res) => {
       const paresASumar = Number(pares) || 1;
       existingProduct.pares = (Number(existingProduct.pares) || 0) + paresASumar;
 
-      // Si trae desglose de tallas (como en media docena), las sumamos una por una
+      // Si trae desglose de tallas, las sumamos una por una
       if (tallas && typeof tallas === 'object') {
         if (!existingProduct.tallas) {
           existingProduct.tallas = new Map();
@@ -28,9 +32,9 @@ export const addProduct = async (req, res) => {
         }
       }
 
-      // Si viene una imagen nueva y no tenía, se la asignamos
-      if (imagen && !existingProduct.imagen) {
-        existingProduct.imagen = imagen;
+      // Si viene una imagen nueva y no tenía, le asignamos la URL de Cloudinary
+      if (imagenUrl && !existingProduct.imagen) {
+        existingProduct.imagen = imagenUrl;
       }
 
       await existingProduct.save();
@@ -40,14 +44,14 @@ export const addProduct = async (req, res) => {
       });
     }
 
-    // Si no existe, se crea un registro completamente nuevo
+    // Si no existe, se crea un registro completamente nuevo con la URL ligera
     const newProduct = new Product({
       qrCode, 
       estilo, 
       color, 
       pares: Number(pares) || 1, 
       marca,
-      imagen,
+      imagen: imagenUrl || "",
       tallas
     });
     
@@ -56,15 +60,16 @@ export const addProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Error al guardar el producto:", error);
-    res.status(500).json({ message: "Error al guardar en la base de datos" });
+    res.status(500).json({ message: "Error al guardar en la base de datos: " + error.message });
   }
 };
 
+// 2. Obtener inventario con paginación y allowDiskUse
 export const getInventory = async (req, res) => {
   console.log("📥 ¡Petición recibida en /api/inventory!");
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 100;
+    const limit = parseInt(req.query.limit) || 12; 
     const skip = (page - 1) * limit;
 
     const products = await Product.find({}, null, { allowDiskUse: true })
@@ -85,11 +90,18 @@ export const getInventory = async (req, res) => {
   }
 };
 
-// 3. Actualizar un producto por ID
+// 3. Actualizar un producto por ID (con Cloudinary si cambia la imagen)
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedProduct = await Product.findByIdAndUpdate(id, req.body, { new: true });
+    let datosActualizar = { ...req.body };
+
+    // Si viene una nueva imagen en base64, la subimos a Cloudinary primero
+    if (datosActualizar.imagen) {
+      datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(id, datosActualizar, { new: true });
 
     if (!updatedProduct) {
       return res.status(404).json({ message: "Producto no encontrado" });
@@ -98,7 +110,7 @@ export const updateProduct = async (req, res) => {
     res.status(200).json(updatedProduct);
   } catch (error) {
     console.error("Error al actualizar producto:", error);
-    res.status(500).json({ message: "Error al actualizar en la base de datos" });
+    res.status(500).json({ message: "Error al actualizar en la base de datos: " + error.message });
   }
 };
 
@@ -115,6 +127,6 @@ export const deleteProduct = async (req, res) => {
     res.status(200).json({ message: "Producto eliminado correctamente" });
   } catch (error) {
     console.error("Error al eliminar producto:", error);
-    res.status(500).json({ message: "Error al eliminar en la base de datos" });
+    res.status(500).json({ message: "Error al eliminar en la base de datos: " + error.message });
   }
 };
