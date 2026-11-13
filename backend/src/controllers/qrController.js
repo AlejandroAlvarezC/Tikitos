@@ -1,11 +1,12 @@
 import QrTemplate from '../models/QrTemplate.js';
+import Product from '../models/Product.js';
 import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
 // 📋 Obtener todas las plantillas (Ordenado por índice primario _id)
 export const getTemplates = async (req, res) => {
   try {
     const templates = await QrTemplate.find({})
-      .sort({ _id: -1 }) // Evita el error de 32MB de RAM en MongoDB
+      .sort({ _id: -1 })
       .limit(50)
       .lean();
       
@@ -76,15 +77,15 @@ export const deleteTemplate = async (req, res) => {
   }
 };
 
+// 🚀 Endpoint temporal para migrar Base64 antiguos a Cloudinary uno por uno
 export const migrarImagenesBase64 = async (req, res) => {
   try {
     console.log("🛠️ Iniciando migración de imágenes Base64 a Cloudinary...");
     let plantillasMigradas = 0;
     let productosMigrados = 0;
 
-    // 1. Obtener solo los IDs de plantillas (evita descargar el Base64 de golpe)
+    // 1. Migrar plantillas
     const templatesIds = await QrTemplate.find({}).select('_id').lean();
-
     for (const item of templatesIds) {
       const tpl = await QrTemplate.findById(item._id).lean();
       if (tpl?.imagen && tpl.imagen.startsWith('data:image')) {
@@ -95,9 +96,8 @@ export const migrarImagenesBase64 = async (req, res) => {
       }
     }
 
-    // 2. Obtener solo los IDs de productos en inventario
+    // 2. Migrar productos del inventario
     const productsIds = await Product.find({}).select('_id').lean();
-
     for (const item of productsIds) {
       const prod = await Product.findById(item._id).lean();
       if (prod?.imagen && prod.imagen.startsWith('data:image')) {

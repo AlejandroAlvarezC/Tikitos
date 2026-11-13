@@ -3,23 +3,25 @@ import {
   getTemplates, 
   createTemplate, 
   updateTemplate, 
-  deleteTemplate 
+  deleteTemplate,
+  migrarImagenesBase64 
 } from '../controllers/qrController.js';
 
 const router = express.Router();
 
-// 📋 Obtener todas las plantillas (URL final: GET /api/qr-templates)
+// 📋 Obtener todas las plantillas
 router.get('/', getTemplates);
 
-// ➕ Crear una nueva plantilla (URL final: POST /api/qr-templates)
+// 🚀 Ruta temporal para migrar imágenes Base64 antiguas a Cloudinary
+router.get('/migrar', migrarImagenesBase64);
+
+// ➕ Crear una nueva plantilla
 router.post('/', createTemplate);
 
-// ✏️ Actualizar una plantilla existente por ID (URL final: PUT /api/qr-templates/:id)
+// ✏️ Actualizar una plantilla existente por ID
 router.put('/:id', updateTemplate);
 
-// ❌ Eliminar una plantilla por ID (URL final: DELETE /api/qr-templates/:id)
+// ❌ Eliminar una plantilla por ID
 router.delete('/:id', deleteTemplate);
-
-router.get('/migrar', migrarImagenesBase64);
 
 export default router;
