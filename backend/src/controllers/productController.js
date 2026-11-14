@@ -2,39 +2,82 @@ import Product from '../models/Product.js';
 import QrTemplate from '../models/QrTemplate.js';
 import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
+// Convierte números o textos de forma segura para comparar sin importar mayúsculas o espacios
+const crearRegexFlexible = (valor = '') => {
+  const limpio = String(valor).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*${limpio}\\s*$`, 'i');
+};
+
+// Busca la imagen en QrTemplate asegurándose de que la plantilla sí tenga foto
+const buscarImagenEnPlantilla = async ({ qrCode, marca, estilo, color }) => {
+  try {
+    const filtroConImagen = { imagen: { $exists: true, $nin: ["", null] } };
+
+    // 1. Buscar primero por qrCode exacto
+    if (qrCode) {
+      const porQr = await QrTemplate.findOne({
+        qrCode: String(qrCode).trim(),
+        ...filtroConImagen
+      }).sort({ _id: -1 }).lean();
+
+      if (porQr?.imagen) return porQr.imagen;
+    }
+
+    // 2. Buscar por marca + estilo + color (soporta números como 5 o 55 y textos)
+    if (marca && estilo !== undefined && color !== undefined) {
+      const porDatos = await QrTemplate.findOne({
+        marca: crearRegexFlexible(marca),
+        estilo: crearRegexFlexible(estilo),
+        color: crearRegexFlexible(color),
+        ...filtroConImagen
+      }).sort({ _id: -1 }).lean();
+
+      if (porDatos?.imagen) return porDatos.imagen;
+    }
+
+    // 3. Respaldo por marca + estilo
+    if (marca && estilo !== undefined) {
+      const porMarcaEstilo = await QrTemplate.findOne({
+        marca: crearRegexFlexible(marca),
+        estilo: crearRegexFlexible(estilo),
+        ...filtroConImagen
+      }).sort({ _id: -1 }).lean();
+
+      if (porMarcaEstilo?.imagen) return porMarcaEstilo.imagen;
+    }
+
+    return "";
+  } catch (err) {
+    console.error("⚠️ Error al buscar imagen en plantilla:", err.message);
+    return "";
+  }
+};
+
 // 1. Agregar o acumular producto si el QR ya existe (heredando foto de la plantilla)
 export const addProduct = async (req, res) => {
   try {
     const { qrCode, estilo, color, pares, marca, imagen, tallas } = req.body;
     
-    if (!qrCode || !estilo || !color || !marca) {
+    if (!qrCode || estilo === undefined || color === undefined || !marca) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
-    // 🌟 A. Procesar imagen si viene en la petición (URL directa o Base64)
+    // A. Procesar imagen si viene en la petición (URL directa o Base64)
     let imagenUrl = "";
-    if (imagen && imagen.startsWith('http')) {
+    if (imagen && String(imagen).startsWith('http')) {
       imagenUrl = imagen;
-    } else if (imagen && imagen.startsWith('data:image')) {
-      imagenUrl = await subirImagenACloudinary(imagen);
+    } else if (imagen && String(imagen).startsWith('data:image')) {
+      const subida = await subirImagenACloudinary(imagen);
+      imagenUrl = subida || imagen;
     }
 
-    // 🌟 B. Si el escaneo del QR no incluye la imagen, la buscamos en la plantilla (QrTemplate)
+    // B. Si el escaneo del QR no incluye la imagen, la buscamos en la plantilla (QrTemplate)
     if (!imagenUrl) {
-      let plantillaAsociada = await QrTemplate.findOne({ qrCode }).sort({ _id: -1 }).lean();
-
-      if (!plantillaAsociada) {
-        plantillaAsociada = await QrTemplate.findOne({ 
-          marca: new RegExp(`^${marca.trim()}$`, 'i'),
-          estilo: new RegExp(`^${estilo.trim()}$`, 'i'),
-          color: new RegExp(`^${color.trim()}$`, 'i')
-        }).sort({ _id: -1 }).lean();
-      }
-
-      if (plantillaAsociada?.imagen) {
-        imagenUrl = plantillaAsociada.imagen.startsWith('data:image')
-          ? await subirImagenACloudinary(plantillaAsociada.imagen)
-          : plantillaAsociada.imagen;
+      const imgPlantilla = await buscarImagenEnPlantilla({ qrCode, marca, estilo, color });
+      if (imgPlantilla) {
+        imagenUrl = imgPlantilla.startsWith('data:image')
+          ? await subirImagenACloudinary(imgPlantilla)
+          : imgPlantilla;
       }
     }
 
@@ -55,7 +98,6 @@ export const addProduct = async (req, res) => {
         }
       }
 
-      // 🌟 Si encontramos imagen (o se actualizó en la plantilla), se la asignamos al producto
       if (imagenUrl) {
         existingProduct.imagen = imagenUrl;
       }
@@ -69,11 +111,11 @@ export const addProduct = async (req, res) => {
 
     // Si no existe, se crea el producto con la imagen obtenida
     const newProduct = new Product({
-      qrCode, 
-      estilo, 
-      color, 
+      qrCode: String(qrCode).trim(), 
+      estilo: String(estilo).trim(), 
+      color: String(color).trim(), 
       pares: Number(pares) || 1, 
-      marca,
+      marca: String(marca).trim(),
       imagen: imagenUrl || "",
       tallas
     });
@@ -87,7 +129,7 @@ export const addProduct = async (req, res) => {
   }
 };
 
-// 2. Obtener inventario instantáneo usando índice nativo _id
+// 2. Obtener inventario y autorreparar productos que estén "Sin foto"
 export const getInventory = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -102,6 +144,19 @@ export const getInventory = async (req, res) => {
         .lean(),
       Product.estimatedDocumentCount()
     ]);
+
+    // 🌟 Si algún producto en la tabla no tiene foto, la busca en QrTemplate y lo actualiza
+    await Promise.all(
+      products.map(async (prod) => {
+        if (!prod.imagen || String(prod.imagen).trim() === "") {
+          const imgEncontrada = await buscarImagenEnPlantilla(prod);
+          if (imgEncontrada) {
+            prod.imagen = imgEncontrada;
+            await Product.updateOne({ _id: prod._id }, { $set: { imagen: imgEncontrada } });
+          }
+        }
+      })
+    );
       
     return res.status(200).json({
       products,
@@ -120,7 +175,7 @@ export const updateProduct = async (req, res) => {
     const { id } = req.params;
     let datosActualizar = { ...req.body };
 
-    if (datosActualizar.imagen && datosActualizar.imagen.startsWith('data:image')) {
+    if (datosActualizar.imagen && String(datosActualizar.imagen).startsWith('data:image')) {
       datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
     }
 
