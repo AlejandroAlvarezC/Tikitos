@@ -1,7 +1,8 @@
 import Product from '../models/Product.js';
+import QrTemplate from '../models/QrTemplate.js';
 import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
-// 1. Agregar o acumular producto si el QR ya existe (con Cloudinary)
+// 1. Agregar o acumular producto si el QR ya existe (heredando foto de la plantilla)
 export const addProduct = async (req, res) => {
   try {
     const { qrCode, estilo, color, pares, marca, imagen, tallas } = req.body;
@@ -10,8 +11,34 @@ export const addProduct = async (req, res) => {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
-    const imagenUrl = await subirImagenACloudinary(imagen);
+    // 🌟 A. Procesar imagen si viene en la petición (URL directa o Base64)
+    let imagenUrl = "";
+    if (imagen && imagen.startsWith('http')) {
+      imagenUrl = imagen;
+    } else if (imagen && imagen.startsWith('data:image')) {
+      imagenUrl = await subirImagenACloudinary(imagen);
+    }
 
+    // 🌟 B. Si el escaneo del QR no incluye la imagen, la buscamos en la plantilla (QrTemplate)
+    if (!imagenUrl) {
+      let plantillaAsociada = await QrTemplate.findOne({ qrCode }).sort({ _id: -1 }).lean();
+
+      if (!plantillaAsociada) {
+        plantillaAsociada = await QrTemplate.findOne({ 
+          marca: new RegExp(`^${marca.trim()}$`, 'i'),
+          estilo: new RegExp(`^${estilo.trim()}$`, 'i'),
+          color: new RegExp(`^${color.trim()}$`, 'i')
+        }).sort({ _id: -1 }).lean();
+      }
+
+      if (plantillaAsociada?.imagen) {
+        imagenUrl = plantillaAsociada.imagen.startsWith('data:image')
+          ? await subirImagenACloudinary(plantillaAsociada.imagen)
+          : plantillaAsociada.imagen;
+      }
+    }
+
+    // Buscar si ya existe un producto con este mismo código QR en inventario
     let existingProduct = await Product.findOne({ qrCode });
 
     if (existingProduct) {
@@ -28,7 +55,8 @@ export const addProduct = async (req, res) => {
         }
       }
 
-      if (imagenUrl && !existingProduct.imagen) {
+      // 🌟 Si encontramos imagen (o se actualizó en la plantilla), se la asignamos al producto
+      if (imagenUrl) {
         existingProduct.imagen = imagenUrl;
       }
 
@@ -39,6 +67,7 @@ export const addProduct = async (req, res) => {
       });
     }
 
+    // Si no existe, se crea el producto con la imagen obtenida
     const newProduct = new Product({
       qrCode, 
       estilo, 
@@ -58,22 +87,20 @@ export const addProduct = async (req, res) => {
   }
 };
 
-// 2. Obtener inventario instantáneo usando índice nativo _id y metadatos
+// 2. Obtener inventario instantáneo usando índice nativo _id
 export const getInventory = async (req, res) => {
-  console.log("📥 ¡Petición recibida en /api/inventory!");
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 12; 
     const skip = (page - 1) * limit;
 
-    // Ejecutamos consulta y conteo rápido en paralelo
     const [products, total] = await Promise.all([
       Product.find({})
-        .sort({ _id: -1 }) // Índice nativo: no consume RAM ni disco al ordenar
+        .sort({ _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Product.estimatedDocumentCount() // Lee metadatos al instante sin escanear toda la colección
+      Product.estimatedDocumentCount()
     ]);
       
     return res.status(200).json({
@@ -87,13 +114,13 @@ export const getInventory = async (req, res) => {
   }
 };
 
-// 3. Actualizar un producto por ID (con Cloudinary si cambia la imagen)
+// 3. Actualizar un producto por ID (con Cloudinary solo si es Base64 nuevo)
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
     let datosActualizar = { ...req.body };
 
-    if (datosActualizar.imagen) {
+    if (datosActualizar.imagen && datosActualizar.imagen.startsWith('data:image')) {
       datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
     }
 
