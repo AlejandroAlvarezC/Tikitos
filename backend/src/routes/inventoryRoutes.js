@@ -5,22 +5,35 @@ import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
 const router = express.Router();
 
-// Auxiliar para comparar textos/números ignorando mayúsculas y espacios
+// Auxiliar para comparar textos/números sin importar mayúsculas ni espacios
 const crearRegexFlexible = (valor = '') => {
   const limpio = String(valor).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^\\s*${limpio}\\s*$`, 'i');
 };
 
-// Busca automáticamente la foto en QrTemplate por qrCode o por marca + estilo + color
-const buscarImagenEnPlantilla = async ({ qrCode, id, marca, estilo, color }) => {
+// 🔍 Función auxiliar para buscar un producto por cualquier identificador válido
+const buscarProductoPorCodigo = async (codigo) => {
+  if (!codigo) return null;
+  const codigoStr = String(codigo).trim();
+  const condiciones = [{ qrCode: codigoStr }, { id: codigoStr }, { estilo: codigoStr }];
+
+  if (/^[0-9a-fA-F]{24}$/.test(codigoStr)) {
+    condiciones.push({ _id: codigoStr });
+  }
+
+  return await Product.findOne({ $or: condiciones });
+};
+
+// 🖼️ Función auxiliar para recuperar la foto desde QrTemplate automáticamente
+const buscarImagenEnPlantilla = async ({ qrCode, id, codigo, marca, estilo, color }) => {
   try {
     const filtroConImagen = { imagen: { $exists: true, $nin: ["", null] } };
-    const codigo = qrCode || id;
+    const codigoFinal = qrCode || id || codigo;
 
-    // 1. Buscar por código QR exacto
-    if (codigo) {
+    // 1. Buscar por qrCode exacto (ej. MEDIA-IMAGEN-I-12-340)
+    if (codigoFinal) {
       const porQr = await QrTemplate.findOne({
-        qrCode: crearRegexFlexible(codigo),
+        qrCode: crearRegexFlexible(codigoFinal),
         ...filtroConImagen
       }).sort({ _id: -1 }).lean();
 
@@ -46,14 +59,14 @@ const buscarImagenEnPlantilla = async ({ qrCode, id, marca, estilo, color }) => 
   }
 };
 
-// 📋 1. Obtener inventario (con autorreparación automática de fotos faltantes)
+// 📋 GET: Obtener todo el inventario (ordenado por _id y autorreparando fotos faltantes)
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find({})
       .sort({ _id: -1 })
       .lean();
 
-    // Si algún producto no tiene foto, la busca en QrTemplate y la guarda automáticamente
+    // Si algún producto quedó con imagen: "", la recupera de su plantilla QrTemplate automáticamente
     await Promise.all(
       products.map(async (prod) => {
         if (!prod.imagen || String(prod.imagen).trim() === "") {
@@ -72,24 +85,18 @@ router.get('/', async (req, res) => {
       })
     );
 
-    return res.status(200).json(products);
-  } catch (error) {
-    console.error("❌ Error al obtener inventario:", error.message);
-    return res.status(500).json({ message: "Error al obtener inventario: " + error.message });
+    res.json(products);
+  } catch (err) {
+    console.error("Error al obtener el inventario:", err);
+    res.status(500).json({ error: "Error al obtener el inventario" });
   }
 });
 
-// ➕ 2. Agregar o escanear producto (hereda la foto de la plantilla automáticamente)
+// ➕ POST: Agregar un nuevo producto manualmente (con subida a Cloudinary o herencia de plantilla)
 router.post('/', async (req, res) => {
   try {
-    const { qrCode, id, estilo, color, pares, marca, imagen, tallas } = req.body;
-    const codigoQR = qrCode || id;
-
-    if (!codigoQR || estilo === undefined || color === undefined || !marca) {
-      return res.status(400).json({ message: "Faltan datos obligatorios" });
-    }
-
-    // A. Si viene imagen en la petición, procesarla
+    const { imagen, ...restoDatos } = req.body;
+    
     let imagenUrl = "";
     if (imagen && String(imagen).startsWith('http')) {
       imagenUrl = imagen;
@@ -97,9 +104,93 @@ router.post('/', async (req, res) => {
       imagenUrl = await subirImagenACloudinary(imagen);
     }
 
-    // B. Si no viene imagen al escanear el QR, obtenerla automáticamente de QrTemplate
     if (!imagenUrl) {
-      const imgPlantilla = await buscarImagenEnPlantilla({ qrCode: codigoQR, marca, estilo, color });
+      imagenUrl = await buscarImagenEnPlantilla(restoDatos);
+    }
+
+    const nuevoProducto = new Product({
+      ...restoDatos,
+      imagen: imagenUrl || ""
+    });
+
+    const productoGuardado = await nuevoProducto.save();
+    res.status(201).json(productoGuardado);
+  } catch (err) {
+    console.error("Error al guardar el producto:", err);
+    res.status(400).json({ error: "Error al guardar el producto: " + err.message });
+  }
+});
+
+// ✏️ PUT: Actualizar un producto (con subida a Cloudinary si cambia la imagen)
+router.put('/:id', async (req, res) => {
+  try {
+    let datosActualizar = { ...req.body };
+
+    if (datosActualizar.imagen && String(datosActualizar.imagen).startsWith('data:image')) {
+      datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
+    }
+
+    const productoActualizado = await Product.findByIdAndUpdate(
+      req.params.id, 
+      datosActualizar, 
+      { new: true }
+    );
+
+    if (!productoActualizado) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+    res.json(productoActualizado);
+  } catch (err) {
+    console.error("Error al actualizar:", err);
+    res.status(400).json({ error: "Error al actualizar el producto: " + err.message });
+  }
+});
+
+// 🗑️ DELETE: Eliminar un producto
+router.delete('/:id', async (req, res) => {
+  try {
+    const productoEliminado = await Product.findByIdAndDelete(req.params.id);
+    if (!productoEliminado) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+    res.json({ message: "Producto eliminado correctamente" });
+  } catch (err) {
+    console.error("Error al eliminar:", err);
+    res.status(500).json({ error: "Error al eliminar el producto" });
+  }
+});
+
+// ➕ POST: Registrar entrada por escaneo QR (heredando foto de QrTemplate automáticamente)
+router.post('/scan-entry', async (req, res) => {
+  try {
+    const { codigo, marca, estilo, color, pares, imagen } = req.body;
+    if (!codigo) return res.status(400).json({ error: "Código QR no proporcionado." });
+
+    const codigoStr = String(codigo).trim();
+    let item = await buscarProductoPorCodigo(codigoStr);
+
+    let estiloFinal = estilo ? String(estilo) : codigoStr;
+    if (codigoStr.includes('MEDIA-')) {
+      const partes = codigoStr.split('-');
+      if (partes.length >= 3) estiloFinal = partes[2];
+    }
+
+    // 1. Procesar imagen si viene en el body
+    let imagenUrl = "";
+    if (imagen && String(imagen).startsWith('http')) {
+      imagenUrl = imagen;
+    } else if (imagen && String(imagen).startsWith('data:image')) {
+      imagenUrl = await subirImagenACloudinary(imagen);
+    }
+
+    // 2. Si el escaneo QR no trae imagen, buscarla automáticamente en QrTemplate
+    if (!imagenUrl) {
+      const imgPlantilla = await buscarImagenEnPlantilla({
+        codigo: codigoStr,
+        marca: marca || item?.marca,
+        estilo: estiloFinal || item?.estilo,
+        color: color || item?.color
+      });
       if (imgPlantilla) {
         imagenUrl = imgPlantilla.startsWith('data:image')
           ? await subirImagenACloudinary(imgPlantilla)
@@ -107,93 +198,94 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Buscar si ya existe el producto en el inventario
-    let existingProduct = await Product.findOne({
-      $or: [{ qrCode: codigoQR }, { id: codigoQR }]
-    });
+    const esMedia = codigoStr.toUpperCase().includes('MEDIA') || (item?.estilo && String(item.estilo).toUpperCase().includes('MEDIA'));
+    const cantidadSumar = Number(pares) || (esMedia ? 6 : 1);
 
-    if (existingProduct) {
-      const paresASumar = Number(pares) || 1;
-      existingProduct.pares = (Number(existingProduct.pares) || 0) + paresASumar;
+    if (item) {
+      item.pares = Number(item.pares || 0) + cantidadSumar;
+      if (marca) item.marca = String(marca);
+      if (color) item.color = String(color);
+      if (imagenUrl) item.imagen = String(imagenUrl);
+      if (!item.qrCode) item.qrCode = codigoStr;
+      await item.save();
+      return res.json({
+        success: true,
+        message: `➕ Entrada registrada. Se sumaron ${cantidadSumar} pares. Total actual: ${item.pares} pares de "${item.estilo}".`,
+        item
+      });
+    } else {
+      const nuevaCantidad = Number(pares) || (esMedia ? 6 : 1);
 
-      if (tallas && typeof tallas === 'object') {
-        if (!existingProduct.tallas) existingProduct.tallas = new Map();
-        for (const [tallaKey, cantidad] of Object.entries(tallas)) {
-          const currentVal = existingProduct.tallas.get
-            ? existingProduct.tallas.get(tallaKey) || 0
-            : existingProduct.tallas[tallaKey] || 0;
-          if (existingProduct.tallas.set) {
-            existingProduct.tallas.set(tallaKey, currentVal + Number(cantidad));
-          } else {
-            existingProduct.tallas[tallaKey] = currentVal + Number(cantidad);
-          }
-        }
-      }
-
-      if (imagenUrl) {
-        existingProduct.imagen = imagenUrl;
-      }
-
-      await existingProduct.save();
-      return res.status(200).json(existingProduct);
+      const nuevoProducto = new Product({
+        qrCode: codigoStr,
+        id: codigoStr,
+        marca: marca ? String(marca) : (esMedia ? "Bebeto" : "Genérica"),
+        estilo: estiloFinal,
+        color: color ? String(color) : "Estándar",
+        pares: nuevaCantidad,
+        imagen: imagenUrl ? String(imagenUrl) : ""
+      });
+      const guardado = await nuevoProducto.save();
+      return res.status(201).json({
+        success: true,
+        message: `✨ Producto nuevo creado con ${nuevaCantidad} pares iniciales.`,
+        item: guardado
+      });
     }
-
-    // Crear producto nuevo ya con su foto de Cloudinary vinculada
-    const newProduct = new Product({
-      qrCode: String(codigoQR).trim(),
-      id: String(codigoQR).trim(),
-      estilo: String(estilo).trim(),
-      color: String(color).trim(),
-      pares: Number(pares) || 1,
-      marca: String(marca).trim(),
-      imagen: imagenUrl || "",
-      tallas
-    });
-
-    const guardado = await newProduct.save();
-    return res.status(201).json(guardado);
-  } catch (error) {
-    console.error("❌ Error al guardar producto:", error.message);
-    return res.status(500).json({ message: "Error al guardar producto: " + error.message });
+  } catch (err) {
+    console.error("❌ Error en scan-entry:", err);
+    res.status(500).json({ error: "Error en el servidor: " + err.message });
   }
 });
 
-// ✏️ 3. Actualizar un producto por ID
-router.put('/:id', async (req, res) => {
+// 📤 POST: Registrar salida (restar 6 pares si es media) por escaneo QR
+router.post('/scan-exit', async (req, res) => {
   try {
-    const { id } = req.params;
-    const datosActualizar = { ...req.body };
+    const { codigo } = req.body;
+    if (!codigo) return res.status(400).json({ error: "Código QR no proporcionado." });
 
-    if (datosActualizar.imagen && String(datosActualizar.imagen).startsWith('data:image')) {
-      datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
+    const codigoStr = String(codigo).trim();
+    let item = await buscarProductoPorCodigo(codigoStr);
+
+    if (!item) {
+      return res.status(404).json({ error: `❌ El código "${codigoStr}" no está registrado en el inventario.` });
     }
 
-    const updatedProduct = await Product.findByIdAndUpdate(id, datosActualizar, { new: true });
-    if (!updatedProduct) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+    const esMedia = 
+      codigoStr.toUpperCase().includes('MEDIA') || 
+      (item.qrCode && String(item.qrCode).toUpperCase().includes('MEDIA')) ||
+      (item.id && String(item.id).toUpperCase().includes('MEDIA')) ||
+      (item.estilo && String(item.estilo).toUpperCase().includes('MEDIA'));
+
+    const cantidadRestar = esMedia ? 6 : 1;
+
+    if (Number(item.pares) < cantidadRestar) {
+      return res.status(400).json({ error: `⚠️ No hay suficientes pares para retirar. Existencias actuales: ${item.pares}.` });
     }
 
-    return res.status(200).json(updatedProduct);
-  } catch (error) {
-    console.error("❌ Error al actualizar producto:", error.message);
-    return res.status(500).json({ message: "Error al actualizar: " + error.message });
-  }
-});
+    item.pares = Number(item.pares) - cantidadRestar;
 
-// ❌ 4. Eliminar un producto por ID
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedProduct = await Product.findByIdAndDelete(id);
-
-    if (!deletedProduct) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+    if (item.pares <= 0) {
+      await Product.findByIdAndDelete(item._id);
+      return res.json({ 
+        success: true, 
+        message: `🔥 Producto "${item.estilo}" agotado (se retiraron ${cantidadRestar} pares) y eliminado del inventario por completo.`,
+        deletedCompletely: true,
+        item 
+      });
+    } else {
+      await item.save();
+      return res.json({ 
+        success: true, 
+        message: `✅ Salida registrada. Se restaron ${cantidadRestar} pares. Restan ${item.pares} pares de "${item.estilo}".`,
+        deletedCompletely: false,
+        item 
+      });
     }
 
-    return res.status(200).json({ message: "Producto eliminado correctamente" });
-  } catch (error) {
-    console.error("❌ Error al eliminar producto:", error.message);
-    return res.status(500).json({ message: "Error al eliminar: " + error.message });
+  } catch (err) {
+    console.error("❌ Error en scan-exit:", err);
+    res.status(500).json({ error: "Error en el servidor: " + err.message });
   }
 });
 

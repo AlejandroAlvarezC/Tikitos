@@ -2,10 +2,8 @@ import QrTemplate from '../models/QrTemplate.js';
 import Product from '../models/Product.js';
 import { subirImagenACloudinary } from '../utils/cloudinaryHelper.js';
 
-// Función auxiliar para escapar caracteres especiales en búsquedas
 const escaparRegex = (texto = '') => String(texto).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Función auxiliar para sincronizar la foto de la plantilla hacia los productos del inventario
 const sincronizarImagenConInventario = async (plantilla) => {
   if (!plantilla?.imagen) return;
 
@@ -14,9 +12,10 @@ const sincronizarImagenConInventario = async (plantilla) => {
 
     if (plantilla.qrCode) {
       condiciones.push({ qrCode: plantilla.qrCode });
+      condiciones.push({ id: plantilla.qrCode });
     }
 
-    if (plantilla.marca && plantilla.estilo && plantilla.color) {
+    if (plantilla.marca && plantilla.estilo !== undefined && plantilla.color !== undefined) {
       condiciones.push({
         marca: new RegExp(`^${escaparRegex(plantilla.marca)}$`, 'i'),
         estilo: new RegExp(`^${escaparRegex(plantilla.estilo)}$`, 'i'),
@@ -35,7 +34,7 @@ const sincronizarImagenConInventario = async (plantilla) => {
   }
 };
 
-// 📋 1. Obtener todas las plantillas (Ordenado por índice primario _id)
+// 📋 1. Obtener todas las plantillas
 export const getTemplates = async (req, res) => {
   try {
     const templates = await QrTemplate.find({})
@@ -50,20 +49,18 @@ export const getTemplates = async (req, res) => {
   }
 };
 
-// ➕ 2. Crear una nueva plantilla (Subiendo imagen a Cloudinary y sincronizando con inventario)
+// ➕ 2. Crear una nueva plantilla
 export const createTemplate = async (req, res) => {
   try {
     const datosPlantilla = { ...req.body };
 
-    // Solo subir a Cloudinary si viene en formato Base64
-    if (datosPlantilla.imagen && datosPlantilla.imagen.startsWith('data:image')) {
+    if (datosPlantilla.imagen && String(datosPlantilla.imagen).startsWith('data:image')) {
       datosPlantilla.imagen = await subirImagenACloudinary(datosPlantilla.imagen);
     }
 
     const nuevaPlantilla = new QrTemplate(datosPlantilla);
     const guardada = await nuevaPlantilla.save();
 
-    // Si el producto ya existe en el inventario sin foto, le asigna esta imagen
     await sincronizarImagenConInventario(guardada);
 
     return res.status(201).json(guardada);
@@ -73,28 +70,51 @@ export const createTemplate = async (req, res) => {
   }
 };
 
-// ✏️ 3. Actualizar una plantilla existente por ID (Subiendo imagen solo si cambió)
+// ✏️ 3. Actualizar una plantilla existente por ID, qrCode o crearla si no existe
 export const updateTemplate = async (req, res) => {
   try {
     const { id } = req.params;
     const datosActualizar = { ...req.body };
+    delete datosActualizar._id;
 
-    // Si es Base64 nueva se sube a Cloudinary; si ya es URL http se conserva igual
-    if (datosActualizar.imagen && datosActualizar.imagen.startsWith('data:image')) {
+    if (datosActualizar.imagen && String(datosActualizar.imagen).startsWith('data:image')) {
       datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
     }
     
-    const actualizada = await QrTemplate.findByIdAndUpdate(
-      id, 
-      datosActualizar, 
-      { new: true, runValidators: false }
-    );
-    
-    if (!actualizada) {
-      return res.status(404).json({ error: "Plantilla no encontrada" });
+    let actualizada = null;
+    if (id && id.length === 24) {
+      actualizada = await QrTemplate.findByIdAndUpdate(
+        id, 
+        datosActualizar, 
+        { new: true, runValidators: false }
+      );
     }
 
-    // Actualizar también la foto en el inventario si el producto ya estaba registrado
+    if (!actualizada && datosActualizar.qrCode) {
+      actualizada = await QrTemplate.findOneAndUpdate(
+        { qrCode: datosActualizar.qrCode },
+        datosActualizar,
+        { new: true, runValidators: false }
+      );
+    }
+
+    if (!actualizada && datosActualizar.marca && datosActualizar.estilo !== undefined && datosActualizar.color !== undefined) {
+      actualizada = await QrTemplate.findOneAndUpdate(
+        {
+          marca: new RegExp(`^${escaparRegex(datosActualizar.marca)}$`, 'i'),
+          estilo: new RegExp(`^${escaparRegex(datosActualizar.estilo)}$`, 'i'),
+          color: new RegExp(`^${escaparRegex(datosActualizar.color)}$`, 'i')
+        },
+        datosActualizar,
+        { new: true, runValidators: false }
+      );
+    }
+
+    if (!actualizada) {
+      const nueva = new QrTemplate(datosActualizar);
+      actualizada = await nueva.save();
+    }
+
     await sincronizarImagenConInventario(actualizada);
 
     return res.status(200).json(actualizada);
@@ -120,22 +140,17 @@ export const deleteTemplate = async (req, res) => {
   }
 };
 
-// 🚀 5. Migrar Base64 antiguos a Cloudinary y vincular fotos faltantes en inventario
+// 🚀 5. Migrar Base64 antiguos a Cloudinary y vincular fotos
 export const migrarImagenesBase64 = async (req, res) => {
   res.status(200).json({ 
     mensaje: "Migración y sincronización iniciadas en segundo plano. Revisa los Logs en Render." 
   });
 
   try {
-    console.log("🛠️ [MIGRACIÓN] Obteniendo IDs directamente del índice en RAM...");
     let plantillasMigradas = 0;
     let productosMigrados = 0;
 
-    // 1. Migrar plantillas y sincronizar sus fotos con el inventario
-    const templatesIds = await QrTemplate.find({})
-      .select({ _id: 1 })
-      .hint({ _id: 1 })
-      .lean();
+    const templatesIds = await QrTemplate.find({}).select({ _id: 1 }).hint({ _id: 1 }).lean();
 
     for (const item of templatesIds) {
       try {
@@ -147,7 +162,6 @@ export const migrarImagenesBase64 = async (req, res) => {
           await QrTemplate.updateOne({ _id: item._id }, { $set: { imagen: nuevaUrl } });
           tpl.imagen = nuevaUrl;
           plantillasMigradas++;
-          console.log(`✅ Plantilla migrada (${plantillasMigradas}): ${nuevaUrl}`);
         }
 
         if (tpl.imagen) {
@@ -158,11 +172,7 @@ export const migrarImagenesBase64 = async (req, res) => {
       }
     }
 
-    // 2. Migrar productos que aún tengan Base64 directo
-    const productsIds = await Product.find({})
-      .select({ _id: 1 })
-      .hint({ _id: 1 })
-      .lean();
+    const productsIds = await Product.find({}).select({ _id: 1 }).hint({ _id: 1 }).lean();
 
     for (const item of productsIds) {
       try {
@@ -171,7 +181,6 @@ export const migrarImagenesBase64 = async (req, res) => {
           const nuevaUrl = await subirImagenACloudinary(prod.imagen);
           await Product.updateOne({ _id: item._id }, { $set: { imagen: nuevaUrl } });
           productosMigrados++;
-          console.log(`✅ Producto migrado (${productosMigrados}): ${nuevaUrl}`);
         }
       } catch (innerErr) {
         console.error(`⚠️ Error en producto ${item._id}:`, innerErr.message);
