@@ -39,7 +39,7 @@ export const getTemplates = async (req, res) => {
   try {
     const templates = await QrTemplate.find({})
       .sort({ _id: -1 })
-      .limit(50)
+      .limit(500)
       .lean();
       
     return res.status(200).json(templates);

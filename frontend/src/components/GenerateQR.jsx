@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { API_URL } from "../config";
 
@@ -22,7 +22,13 @@ export default function GenerateQR() {
 
   // 🌟 Estados para el Modal de Impresión de Media Docena (Almacena { [id]: cantidad })
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [selectedMediaForPrint, setSelectedMediaForPrint] = useState({}); 
+  const [selectedMediaForPrint, setSelectedMediaForPrint] = useState({});
+
+  // 🌟 Estados de búsqueda y filtros dentro del Modal de Impresión
+  const [busquedaPrint, setBusquedaPrint] = useState("");
+  const [filtroMarcaPrint, setFiltroMarcaPrint] = useState("");
+  const [filtroEstiloPrint, setFiltroEstiloPrint] = useState("");
+  const [filtroColorPrint, setFiltroColorPrint] = useState("");
 
   // 🌟 Cargar plantillas desde el Backend
   const fetchTemplates = useCallback(async () => {
@@ -48,6 +54,85 @@ export default function GenerateQR() {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  // 🌟 Opciones únicas y ordenadas para los filtros del modal de impresión
+  const marcasPrint = useMemo(() => {
+    const mapa = new Map();
+    modelosMediaGuardados.forEach((m) => {
+      const texto = String(m.marca || "").trim();
+      if (texto && !mapa.has(texto.toLowerCase())) {
+        mapa.set(texto.toLowerCase(), texto.toUpperCase());
+      }
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [modelosMediaGuardados]);
+
+  const estilosPrint = useMemo(() => {
+    const base = filtroMarcaPrint
+      ? modelosMediaGuardados.filter(
+          (m) => String(m.marca || "").trim().toLowerCase() === filtroMarcaPrint.toLowerCase()
+        )
+      : modelosMediaGuardados;
+
+    const unicos = [...new Set(base.map((m) => String(m.estilo || "").trim()).filter(Boolean))];
+    return unicos.sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+  }, [modelosMediaGuardados, filtroMarcaPrint]);
+
+  const coloresPrint = useMemo(() => {
+    const base = modelosMediaGuardados.filter((m) => {
+      const okMarca =
+        !filtroMarcaPrint ||
+        String(m.marca || "").trim().toLowerCase() === filtroMarcaPrint.toLowerCase();
+      const okEstilo =
+        !filtroEstiloPrint ||
+        String(m.estilo || "").trim().toLowerCase() === filtroEstiloPrint.toLowerCase();
+      return okMarca && okEstilo;
+    });
+
+    const mapa = new Map();
+    base.forEach((m) => {
+      const texto = String(m.color || "").trim();
+      if (texto && !mapa.has(texto.toLowerCase())) {
+        mapa.set(texto.toLowerCase(), texto);
+      }
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [modelosMediaGuardados, filtroMarcaPrint, filtroEstiloPrint]);
+
+  // 🌟 Lista final filtrada para mostrar en el modal (no afecta lo ya seleccionado)
+  const modelosMediaFiltrados = useMemo(() => {
+    const termino = busquedaPrint.trim().toLowerCase();
+
+    return modelosMediaGuardados.filter((m) => {
+      const marca = String(m.marca || "").trim().toLowerCase();
+      const estilo = String(m.estilo || "").trim().toLowerCase();
+      const color = String(m.color || "").trim().toLowerCase();
+      const qrCode = String(m.qrCode || "").trim().toLowerCase();
+
+      const okMarca = !filtroMarcaPrint || marca === filtroMarcaPrint.toLowerCase();
+      const okEstilo = !filtroEstiloPrint || estilo === filtroEstiloPrint.toLowerCase();
+      const okColor = !filtroColorPrint || color === filtroColorPrint.toLowerCase();
+      const okBusqueda =
+        !termino ||
+        marca.includes(termino) ||
+        estilo.includes(termino) ||
+        color.includes(termino) ||
+        qrCode.includes(termino);
+
+      return okMarca && okEstilo && okColor && okBusqueda;
+    });
+  }, [modelosMediaGuardados, busquedaPrint, filtroMarcaPrint, filtroEstiloPrint, filtroColorPrint]);
+
+  const hayFiltrosPrintActivos = Boolean(
+    busquedaPrint || filtroMarcaPrint || filtroEstiloPrint || filtroColorPrint
+  );
+
+  const limpiarFiltrosPrint = () => {
+    setBusquedaPrint("");
+    setFiltroMarcaPrint("");
+    setFiltroEstiloPrint("");
+    setFiltroColorPrint("");
+  };
 
   const qrDataJSON = JSON.stringify({
     qrCode: formData.qrCode, estilo: formData.estilo, color: formData.color, marca: formData.marca, pares: 1
@@ -394,7 +479,7 @@ export default function GenerateQR() {
                         key={id}
                         onClick={() => {
                           setFormData(m);
-                          setEditingId(id); // 🌟 Activamos la edición con el ID correspondiente
+                          setEditingId(id);
                         }}
                         className={`p-2.5 rounded-lg border cursor-pointer transition relative group ${
                           editingId === id ? "border-amber-500 bg-amber-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
@@ -557,7 +642,7 @@ export default function GenerateQR() {
                         key={id}
                         onClick={() => {
                           setMediaFormData(m);
-                          setEditingId(id); // 🌟 Activamos la edición con el ID correspondiente
+                          setEditingId(id);
                         }}
                         className={`p-2.5 rounded-lg border cursor-pointer transition relative group ${
                           editingId === id ? "border-amber-500 bg-amber-50 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"
@@ -577,7 +662,7 @@ export default function GenerateQR() {
 
       </div>
 
-      {/* 🌟 VENTANA EMERGENTE (MODAL) CON OPCIÓN DE 20, 25 Y 50 UNIDADES */}
+      {/* 🌟 VENTANA EMERGENTE (MODAL) CON BUSCADOR Y FILTROS POR MARCA, ESTILO Y COLOR */}
       {isPrintModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
@@ -594,11 +679,90 @@ export default function GenerateQR() {
               </button>
             </div>
 
+            {/* 🔍 Barra de búsqueda y filtros en cascada */}
+            <div className="p-3 bg-gray-50 border-b border-gray-200 space-y-2">
+              <input
+                type="text"
+                value={busquedaPrint}
+                onChange={(e) => setBusquedaPrint(e.target.value)}
+                placeholder="🔍 Buscar por marca, estilo, color o código QR..."
+                className="w-full px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <select
+                  value={filtroMarcaPrint}
+                  onChange={(e) => {
+                    setFiltroMarcaPrint(e.target.value);
+                    setFiltroEstiloPrint("");
+                    setFiltroColorPrint("");
+                  }}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                >
+                  <option value="">Todas las marcas</option>
+                  {marcasPrint.map((marca) => (
+                    <option key={marca} value={marca}>{marca}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroEstiloPrint}
+                  onChange={(e) => {
+                    setFiltroEstiloPrint(e.target.value);
+                    setFiltroColorPrint("");
+                  }}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                >
+                  <option value="">Todos los estilos</option>
+                  {estilosPrint.map((estilo) => (
+                    <option key={estilo} value={estilo}>Est: {estilo}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroColorPrint}
+                  onChange={(e) => setFiltroColorPrint(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                >
+                  <option value="">Todos los colores</option>
+                  {coloresPrint.map((color) => (
+                    <option key={color} value={color}>{color}</option>
+                  ))}
+                </select>
+              </div>
+
+              {hayFiltrosPrintActivos && (
+                <div className="flex items-center justify-between text-[11px] text-gray-600 pt-0.5">
+                  <span>
+                    Mostrando <strong className="text-purple-800">{modelosMediaFiltrados.length}</strong> de {modelosMediaGuardados.length} plantillas
+                  </span>
+                  <button
+                    type="button"
+                    onClick={limpiarFiltrosPrint}
+                    className="text-purple-700 font-bold hover:underline cursor-pointer"
+                  >
+                    ✕ Limpiar filtros
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="p-4 overflow-y-auto flex-grow space-y-2">
               {modelosMediaGuardados.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">No hay modelos de media docena guardados en la nube.</p>
+              ) : modelosMediaFiltrados.length === 0 ? (
+                <div className="text-center py-8 space-y-2">
+                  <p className="text-sm text-gray-500">No se encontraron plantillas con esos filtros.</p>
+                  <button
+                    type="button"
+                    onClick={limpiarFiltrosPrint}
+                    className="text-xs font-bold text-purple-700 hover:underline cursor-pointer"
+                  >
+                    Ver todas las plantillas
+                  </button>
+                </div>
               ) : (
-                modelosMediaGuardados.map((m) => {
+                modelosMediaFiltrados.map((m) => {
                   const id = m._id || m.id;
                   const cantidadActual = selectedMediaForPrint[id];
                   const isChecked = cantidadActual !== undefined && cantidadActual > 0;
