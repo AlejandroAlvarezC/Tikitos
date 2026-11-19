@@ -126,6 +126,10 @@ router.put('/:id', async (req, res) => {
   try {
     let datosActualizar = { ...req.body };
 
+    if (datosActualizar.pares !== undefined) {
+      datosActualizar.pares = Math.max(0, Number(datosActualizar.pares) || 0);
+    }
+
     if (datosActualizar.imagen && String(datosActualizar.imagen).startsWith('data:image')) {
       datosActualizar.imagen = await subirImagenACloudinary(datosActualizar.imagen);
     }
@@ -238,7 +242,7 @@ router.post('/scan-entry', async (req, res) => {
   }
 });
 
-// 📤 POST: Registrar salida (restar 6 pares si es media) por escaneo QR
+// 📤 POST: Registrar salida (restar 6 pares si es media) dejando el producto en 0 si se agota
 router.post('/scan-exit', async (req, res) => {
   try {
     const { codigo } = req.body;
@@ -263,25 +267,18 @@ router.post('/scan-exit', async (req, res) => {
       return res.status(400).json({ error: `⚠️ No hay suficientes pares para retirar. Existencias actuales: ${item.pares}.` });
     }
 
-    item.pares = Number(item.pares) - cantidadRestar;
+    item.pares = Math.max(0, Number(item.pares) - cantidadRestar);
+    await item.save();
 
-    if (item.pares <= 0) {
-      await Product.findByIdAndDelete(item._id);
-      return res.json({ 
-        success: true, 
-        message: `🔥 Producto "${item.estilo}" agotado (se retiraron ${cantidadRestar} pares) y eliminado del inventario por completo.`,
-        deletedCompletely: true,
-        item 
-      });
-    } else {
-      await item.save();
-      return res.json({ 
-        success: true, 
-        message: `✅ Salida registrada. Se restaron ${cantidadRestar} pares. Restan ${item.pares} pares de "${item.estilo}".`,
-        deletedCompletely: false,
-        item 
-      });
-    }
+    return res.json({ 
+      success: true, 
+      message:
+        item.pares === 0
+          ? `⚠️ Producto "${item.estilo}" agotado (se retiraron ${cantidadRestar} pares). Existencias en 0.`
+          : `✅ Salida registrada. Se restaron ${cantidadRestar} pares. Restan ${item.pares} pares de "${item.estilo}".`,
+      deletedCompletely: false,
+      item 
+    });
 
   } catch (err) {
     console.error("❌ Error en scan-exit:", err);

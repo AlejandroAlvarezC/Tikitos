@@ -99,7 +99,7 @@ export default function GenerateQR() {
     return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "es"));
   }, [modelosMediaGuardados, filtroMarcaPrint, filtroEstiloPrint]);
 
-  // 🌟 Lista final filtrada para mostrar en el modal (no afecta lo ya seleccionado)
+  // 🌟 Lista final filtrada para mostrar en el modal
   const modelosMediaFiltrados = useMemo(() => {
     const termino = busquedaPrint.trim().toLowerCase();
 
@@ -181,8 +181,6 @@ export default function GenerateQR() {
 
   const handleGuardarModelo = async (tipo) => {
     const dataActual = tipo === "individual" ? formData : mediaFormData;
-
-    // 🌟 Generamos un nombre descriptivo automático si no viene especificado
     const nombrePlantilla = dataActual.nombre || `${dataActual.marca} - ${dataActual.estilo} (${dataActual.color})`.trim();
 
     const payload = tipo === "individual" 
@@ -195,7 +193,6 @@ export default function GenerateQR() {
     }
 
     try {
-      // 🌟 Si tenemos un editingId usamos PUT (actualizar), de lo contrario POST (crear)
       const url = editingId 
         ? `${API_URL}/api/qr-templates/${editingId}` 
         : `${API_URL}/api/qr-templates`;
@@ -215,7 +212,6 @@ export default function GenerateQR() {
 
       await fetchTemplates();
 
-      // Limpiamos formularios y salimos del modo edición
       setEditingId(null);
       if (tipo === "individual") {
         setFormData({ qrCode: "", estilo: "", color: "", marca: "", imagen: "" });
@@ -251,23 +247,29 @@ export default function GenerateQR() {
     window.print();
   };
 
-  const EtiquetaIndividual = () => (
-    <div className="print-label bg-white p-2 border border-gray-300 rounded-lg shadow-sm text-center flex flex-col items-center justify-center">
-      <h3 className="font-bold text-sm text-gray-800 uppercase tracking-wide m-0">
+  const EtiquetaIndividual = ({ isPrint = false }) => (
+    <div
+      className={`bg-white border border-gray-300 rounded-lg text-center flex flex-col items-center justify-center overflow-hidden ${
+        isPrint ? "w-full h-full p-1.5" : "p-2 shadow-sm"
+      }`}
+    >
+      <h3 className={`font-extrabold text-gray-900 uppercase tracking-wide m-0 truncate w-full leading-tight ${isPrint ? "text-[13px]" : "text-sm"}`}>
         {formData.marca || "MARCA"}
       </h3>
-      <div className="my-1.5 p-1 bg-white rounded border border-gray-100">
-        <QRCodeSVG value={formData.qrCode ? qrDataJSON : "vacio"} size={90} level="M" />
+      <div className="my-1 p-0.5 bg-white rounded border border-gray-100 flex items-center justify-center">
+        <QRCodeSVG value={formData.qrCode ? qrDataJSON : "vacio"} size={isPrint ? 96 : 90} level="M" />
       </div>
-      <div className="text-[10px] text-gray-700 space-y-0.5 font-medium leading-tight w-full">
-        <p><span className="font-bold">Est:</span> {formData.estilo || "—"} | <span className="font-bold">Col:</span> {formData.color || "—"}</p>
-        <p className="font-mono text-[8px] text-gray-400 mt-1 break-all">{formData.qrCode || "—"}</p>
+      <div className={`text-gray-800 space-y-0.5 font-medium leading-tight w-full ${isPrint ? "text-[10px]" : "text-[10px]"}`}>
+        <p className="truncate">
+          <span className="font-bold">Est:</span> {formData.estilo || "—"} | <span className="font-bold">Col:</span> {formData.color || "—"}
+        </p>
+        <p className="font-mono text-[7.5px] text-gray-500 truncate">{formData.qrCode || "—"}</p>
       </div>
     </div>
   );
 
   const EtiquetaMedia = () => (
-    <div className="print-label bg-white p-2 border border-purple-300 rounded-lg shadow-sm text-center flex flex-col items-center justify-center relative">
+    <div className="bg-white p-2 border border-purple-300 rounded-lg shadow-sm text-center flex flex-col items-center justify-center relative">
       <span className="absolute top-1 right-1 bg-purple-100 text-purple-800 text-[8px] font-bold px-1.5 py-0.5 rounded">
         6 Pares
       </span>
@@ -291,27 +293,33 @@ export default function GenerateQR() {
     </div>
   );
 
+  // 🌟 Etiqueta de impresión optimizada para llenar cada celda de la cuadrícula 4x5 (20 por hoja)
   const EtiquetaMediaModalItem = ({ m }) => (
-    <div className="media-large-card bg-white p-1.5 border border-purple-300 rounded-lg text-center flex flex-col items-center justify-center relative page-break-inside-avoid shadow-sm">
-      <span className="absolute top-1 right-1 bg-purple-100 text-purple-800 text-[7px] font-bold px-1 py-0.2 rounded">
+    <div className="w-full h-full bg-white px-2 py-1.5 border border-purple-300 rounded-lg text-center flex flex-col items-center justify-between relative overflow-hidden">
+      <span className="absolute top-1 right-1.5 bg-purple-100 text-purple-800 text-[8px] font-bold px-1.5 py-0.5 rounded leading-none">
         6P
       </span>
-      <h3 className="font-bold text-[11px] text-gray-900 uppercase tracking-wide m-0 truncate w-full">
+
+      <h3 className="font-extrabold text-[13px] text-gray-900 uppercase tracking-wide m-0 truncate w-full pr-6 leading-tight">
         {m.marca || "MARCA"}
       </h3>
-      <div className="my-0.5 p-0.5 bg-white rounded border border-gray-200">
-        <QRCodeSVG value={m.qrCode ? getMediaQrDataJSON(m) : "vacio"} size={80} level="M" />
+
+      <div className="my-0.5 p-0.5 bg-white rounded border border-gray-200 flex items-center justify-center">
+        <QRCodeSVG value={m.qrCode ? getMediaQrDataJSON(m) : "vacio"} size={104} level="M" />
       </div>
-      <div className="text-[8px] text-gray-800 space-y-0.5 font-medium leading-tight w-full">
-        <p className="truncate"><span className="font-bold text-gray-500">Est:</span> {m.estilo || "—"} | <span className="font-bold text-gray-500">Col:</span> {m.color || "—"}</p>
+
+      <div className="text-[10px] text-gray-800 space-y-0.5 font-semibold leading-tight w-full">
+        <p className="truncate">
+          <span className="font-bold text-gray-500">Est:</span> {m.estilo || "—"} | <span className="font-bold text-gray-500">Col:</span> {m.color || "—"}
+        </p>
         
-        <div className="flex justify-center gap-1 bg-purple-50 text-purple-900 px-1 py-0.2 rounded my-0.2 text-[7px] font-bold border border-purple-100">
+        <div className="flex justify-center gap-2 bg-purple-50 text-purple-900 px-1.5 py-0.5 rounded text-[9px] font-bold border border-purple-100">
           <span>10:{m.tallas?.["10"] || 0}</span>
           <span>11:{m.tallas?.["11"] || 0}</span>
           <span>12:{m.tallas?.["12"] || 0}</span>
         </div>
 
-        <p className="font-mono text-[6px] text-gray-400 truncate">{m.qrCode || "—"}</p>
+        <p className="font-mono text-[7.5px] text-gray-500 truncate">{m.qrCode || "—"}</p>
       </div>
     </div>
   );
@@ -323,15 +331,64 @@ export default function GenerateQR() {
     return Array.from({ length: cantidad }, () => m);
   });
 
+  // 🌟 20 etiquetas por hoja (4 columnas x 5 filas a hoja completa)
+  const ETIQUETAS_POR_HOJA_MEDIA = 20;
   const paginasMedia = [];
-  for (let i = 0; i < seleccionadosMedia.length; i += 25) {
-    paginasMedia.push(seleccionadosMedia.slice(i, i + 25));
+  for (let i = 0; i < seleccionadosMedia.length; i += ETIQUETAS_POR_HOJA_MEDIA) {
+    paginasMedia.push(seleccionadosMedia.slice(i, i + ETIQUETAS_POR_HOJA_MEDIA));
   }
 
   const totalEtiquetasSeleccionadas = Object.values(selectedMediaForPrint).reduce((a, b) => a + (b || 0), 0);
 
   return (
     <div className="bg-white rounded-xl shadow p-6 mb-6 print:p-0 print:shadow-none print:m-0 print:bg-transparent">
+
+      {/* 🌟 Estilos dedicados de impresión a hoja Carta completa sin márgenes desperdiciados */}
+      <style>{`
+        @media print {
+          @page {
+            size: letter portrait;
+            margin: 0;
+          }
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .tikitos-print-sheet-media {
+            width: 100% !important;
+            height: 276mm !important;
+            padding: 5mm !important;
+            box-sizing: border-box !important;
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
+            gap: 2.5mm !important;
+            page-break-after: always;
+            break-after: page;
+            overflow: hidden !important;
+          }
+          .tikitos-print-sheet-ind {
+            width: 100% !important;
+            height: 276mm !important;
+            padding: 5mm !important;
+            box-sizing: border-box !important;
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            grid-template-rows: repeat(6, minmax(0, 1fr)) !important;
+            gap: 2mm !important;
+            page-break-after: always;
+            break-after: page;
+            overflow: hidden !important;
+          }
+          .tikitos-print-sheet-media:last-child,
+          .tikitos-print-sheet-ind:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+        }
+      `}</style>
       
       <div className="print:hidden">
         
@@ -669,7 +726,7 @@ export default function GenerateQR() {
             <div className="p-4 bg-purple-900 text-white flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-lg">🖨️ Seleccionar Plantillas (Media Docena)</h3>
-                <p className="text-xs text-purple-200">Elige cuántas etiquetas de cada plantilla deseas imprimir.</p>
+                <p className="text-xs text-purple-200">Elige cuántas etiquetas de cada plantilla deseas imprimir (20 por hoja).</p>
               </div>
               <button 
                 onClick={() => setIsPrintModalOpen(false)}
@@ -782,7 +839,7 @@ export default function GenerateQR() {
                             setSelectedMediaForPrint(prev => {
                               const copia = { ...prev };
                               if (e.target.checked) {
-                                copia[id] = 1; // Por defecto arranca en 1 unidad
+                                copia[id] = 1;
                               } else {
                                 delete copia[id];
                               }
@@ -811,9 +868,9 @@ export default function GenerateQR() {
                             }}
                             className="text-xs font-semibold text-purple-700 bg-white border border-purple-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm cursor-pointer"
                           >
-                            {[1, 2, 3, 4, 5, 6, 10, 12, 18, 20, 24, 25, 50].map((num) => (
+                            {[1, 2, 3, 4, 5, 6, 10, 12, 18, 20, 24, 30, 40, 60].map((num) => (
                               <option key={num} value={num}>
-                                {num} {num === 1 ? 'Unidad' : 'Unidades'} {num === 25 ? '⭐ (1 Hoja)' : num === 50 ? '⭐ (2 Hojas)' : ''}
+                                {num} {num === 1 ? 'Unidad' : 'Unidades'}{num === 20 ? ' ⭐ (1 Hoja)' : num === 40 ? ' ⭐ (2 Hojas)' : num === 60 ? ' ⭐ (3 Hojas)' : ''}
                               </option>
                             ))}
                           </select>
@@ -862,15 +919,15 @@ export default function GenerateQR() {
       <div className="hidden print:block">
         {subTab === "individual" ? (
           Array.from({ length: hojas }).map((_, hojaIndex) => (
-            <div key={hojaIndex} className="print-page grid grid-cols-4 gap-2 p-4 break-after-page items-center justify-items-center">
+            <div key={hojaIndex} className="tikitos-print-sheet-ind">
               {Array.from({ length: 24 }).map((_, i) => (
-                <EtiquetaIndividual key={i} />
+                <EtiquetaIndividual key={i} isPrint />
               ))}
             </div>
           ))
         ) : (
           paginasMedia.map((paginaItems, hojaIndex) => (
-            <div key={hojaIndex} className="print-page grid grid-cols-5 gap-1.5 p-2 break-after-page items-center justify-items-center">
+            <div key={hojaIndex} className="tikitos-print-sheet-media">
               {paginaItems.map((m, i) => (
                 <EtiquetaMediaModalItem key={i} m={m} />
               ))}

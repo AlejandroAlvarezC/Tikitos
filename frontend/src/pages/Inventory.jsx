@@ -17,6 +17,18 @@ const getMarcaEstilo = (marca) => {
   return "text-gray-700 bg-gray-50 border-gray-200 print:text-black";
 };
 
+// Helper para asignar colores según la cantidad de pares
+const getParesEstilo = (pares) => {
+  const cantidad = Number(pares) || 0;
+  if (cantidad >= 12) {
+    return "bg-green-100 text-green-700"; // 12 o más -> Verde
+  }
+  if (cantidad > 0) {
+    return "bg-orange-100 text-orange-700"; // 1 a 11 (incluye 6) -> Naranja
+  }
+  return "bg-red-100 text-red-700"; // 0 -> Rojo
+};
+
 export default function Inventory({ isAdmin }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -276,9 +288,7 @@ export default function Inventory({ isAdmin }) {
                           className="w-14 p-1 border border-blue-400 rounded text-center font-bold text-xs"
                         />
                       ) : (
-                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full font-bold text-xs
-                          ${pares < 15 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}
-                        `}>
+                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full font-bold text-xs ${getParesEstilo(pares)}`}>
                           {pares}
                         </span>
                       )}
@@ -391,10 +401,7 @@ export default function Inventory({ isAdmin }) {
                               className="w-16 p-1.5 border border-blue-400 rounded-md text-center font-bold text-sm print:hidden"
                             />
                           ) : (
-                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full font-bold text-sm
-                              ${pares < 15 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}
-                              print:bg-transparent print:text-black print:p-0
-                            `}>
+                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full font-bold text-sm ${getParesEstilo(pares)} print:bg-transparent print:text-black print:p-0`}>
                               {pares}
                             </span>
                           )}
