@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { API_URL } from "../config";
 import Footer from "../components/Footer";
 
@@ -35,6 +35,7 @@ export default function Inventory({ isAdmin }) {
   const [error, setError] = useState(null);
 
   const [selectedMarca, setSelectedMarca] = useState("");
+  const [selectedEstilo, setSelectedEstilo] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
 
   const [editingId, setEditingId] = useState(null);
@@ -125,14 +126,52 @@ export default function Inventory({ isAdmin }) {
     }
   };
 
-  const marcasDisponibles = [...new Set(items.map((item) => item.marca).filter(Boolean))];
-  const coloresDisponibles = [...new Set(items.map((item) => item.color).filter(Boolean))];
+  // Opciones únicas y ordenadas en cascada: Marca -> Estilo -> Color
+  const marcasDisponibles = useMemo(() => {
+    const mapa = new Map();
+    items.forEach((item) => {
+      const texto = String(item.marca || "").trim();
+      if (texto && !mapa.has(texto.toLowerCase())) {
+        mapa.set(texto.toLowerCase(), texto);
+      }
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [items]);
 
-  const itemsFiltrados = items.filter((item) => {
-    const coincideMarca = selectedMarca === "" || item.marca === selectedMarca;
-    const coincideColor = selectedColor === "" || item.color === selectedColor;
-    return coincideMarca && coincideColor;
-  });
+  const estilosDisponibles = useMemo(() => {
+    const base = selectedMarca
+      ? items.filter((item) => String(item.marca || "").trim().toLowerCase() === selectedMarca.toLowerCase())
+      : items;
+
+    const unicos = [...new Set(base.map((item) => String(item.estilo || "").trim()).filter(Boolean))];
+    return unicos.sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+  }, [items, selectedMarca]);
+
+  const coloresDisponibles = useMemo(() => {
+    const base = items.filter((item) => {
+      const coincideMarca = !selectedMarca || String(item.marca || "").trim().toLowerCase() === selectedMarca.toLowerCase();
+      const coincideEstilo = !selectedEstilo || String(item.estilo || "").trim().toLowerCase() === selectedEstilo.toLowerCase();
+      return coincideMarca && coincideEstilo;
+    });
+
+    const mapa = new Map();
+    base.forEach((item) => {
+      const texto = String(item.color || "").trim();
+      if (texto && !mapa.has(texto.toLowerCase())) {
+        mapa.set(texto.toLowerCase(), texto);
+      }
+    });
+    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [items, selectedMarca, selectedEstilo]);
+
+  const itemsFiltrados = useMemo(() => {
+    return items.filter((item) => {
+      const coincideMarca = !selectedMarca || String(item.marca || "").trim().toLowerCase() === selectedMarca.toLowerCase();
+      const coincideEstilo = !selectedEstilo || String(item.estilo || "").trim().toLowerCase() === selectedEstilo.toLowerCase();
+      const coincideColor = !selectedColor || String(item.color || "").trim().toLowerCase() === selectedColor.toLowerCase();
+      return coincideMarca && coincideEstilo && coincideColor;
+    });
+  }, [items, selectedMarca, selectedEstilo, selectedColor]);
 
   if (loading) {
     return (
@@ -181,18 +220,34 @@ export default function Inventory({ isAdmin }) {
             </div>
           </div>
 
-          {/* Fila Inferior: Filtros de Marca y Color */}
+          {/* Fila Inferior: Filtros de Marca, Estilo y Color */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
             <h2 className="text-base font-bold text-gray-700">📦 Inventario Activo</h2>
 
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <select
                 value={selectedMarca}
-                onChange={(e) => setSelectedMarca(e.target.value)}
+                onChange={(e) => {
+                  setSelectedMarca(e.target.value);
+                  setSelectedEstilo("");
+                  setSelectedColor("");
+                }}
                 className="flex-1 sm:flex-none p-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Todas las marcas</option>
                 {marcasDisponibles.map((marca, i) => <option key={i} value={marca}>{marca}</option>)}
+              </select>
+
+              <select
+                value={selectedEstilo}
+                onChange={(e) => {
+                  setSelectedEstilo(e.target.value);
+                  setSelectedColor("");
+                }}
+                className="flex-1 sm:flex-none p-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todos los estilos</option>
+                {estilosDisponibles.map((estilo, i) => <option key={i} value={estilo}>Est: {estilo}</option>)}
               </select>
 
               <select
@@ -204,9 +259,13 @@ export default function Inventory({ isAdmin }) {
                 {coloresDisponibles.map((color, i) => <option key={i} value={color}>{color}</option>)}
               </select>
 
-              {(selectedMarca || selectedColor) && (
+              {(selectedMarca || selectedEstilo || selectedColor) && (
                 <button
-                  onClick={() => { setSelectedMarca(""); setSelectedColor(""); }}
+                  onClick={() => {
+                    setSelectedMarca("");
+                    setSelectedEstilo("");
+                    setSelectedColor("");
+                  }}
                   className="p-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors w-full sm:w-auto cursor-pointer"
                 >
                   Borrar filtros
